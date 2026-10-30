@@ -67,16 +67,30 @@ def rules_text(s):
     return re.sub(r"\[([^\]]+)\]", token, s)
 
 
-def build(variants, sets):
-    set_date = {s["prefix"]: s["releaseDate"][:10] for s in sets}
-
-    # Champions are named by their champion units ("Jinx, Rebel"); a legend's champion is its tag.
+def champions(variants):
+    """Champions are named by their champion units ("Jinx, Rebel"); a legend's champion is its tag."""
     champs = {v["card"]["name"].split(", ")[0] for v in variants
               if v["card"]["super"] == "Champion" and ", " in v["card"]["name"]}
     for v in variants:
         c = v["card"]
         if c["type"] == "Legend" and c["tags"] and not any(t in champs for t in c["tags"]):
             champs.add(c["tags"][-1])
+    return champs
+
+
+def champion_of(c, champs):
+    tags = c["tags"] or []
+    prefix = c["name"].split(", ")[0] if ", " in c["name"] else None
+    if c["type"] == "Legend":
+        return next((t for t in tags if t in champs), prefix)
+    if prefix in champs:
+        return prefix
+    return next((t for t in tags if t in champs), None)
+
+
+def build(variants, sets):
+    set_date = {s["prefix"]: s["releaseDate"][:10] for s in sets}
+    champs = champions(variants)
 
     by_card = defaultdict(list)
     for v in variants:
@@ -93,13 +107,7 @@ def build(variants, sets):
         base = prints[0]
         c = base["card"]
         tags = c["tags"] or []
-        prefix = c["name"].split(", ")[0] if ", " in c["name"] else None
-        if c["type"] == "Legend":
-            champ = next((t for t in tags if t in champs), prefix)
-        elif prefix in champs:
-            champ = prefix
-        else:
-            champ = next((t for t in tags if t in champs), None)
+        champ = champion_of(c, champs)
         role = None
         if champ:
             role = 0 if c["type"] == "Legend" else 1 if c["super"] == "Champion" else 2 if c["super"] == "Signature" else 3
