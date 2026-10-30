@@ -63,7 +63,9 @@ python3 tts/patch.py   # copy of the installed Workshop table that downloads tts
 ```
 
 Load "Riftbound LGS Table (auto)" under Games → Save & Load. The copy also has a U/G button on gear that turns it into
-a unit with Might equal to its Energy (Orianna). Re-run `patch.py` after the Workshop table updates; `--diff` lists
+a unit with Might equal to its Energy (Orianna), and fixes for bugs in the table's scripts (`FIXES` in `patch.py`:
+"Reveal 1"/Numpad 4 did nothing, drawing/glimpsing/revealing the last card of a deck failed, recycling a rune renamed the
+rune deck to "main", "Toggle Analytics" was ignored). Re-run `patch.py` after the Workshop table updates; `--diff` lists
 where the generated notes differ from the table's. Hand fixes go in `tts/overrides.json`.
 
 ## Legal
