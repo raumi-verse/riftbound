@@ -1,3 +1,0 @@
-{
-  "_comment": "Hand fixes for tts.py, by printing: {\"OGN-123\": {\"notes\": {\"spawn\": \"Buff\"}, \"description\": \"…\"}}. notes fields are merged, other keys replace."
-}

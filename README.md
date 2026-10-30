@@ -44,29 +44,6 @@ folding, hiding tokens/runes, domain order. Edit and reload.
 - `sync.py`: fetch, fold printings into cards, link champions, write `web/cards.js`
 - `web/app.js`: query parser, filters, sorting, grouping, rendering
 - `web/index.html`, `web/style.css` (Catppuccin Mocha)
-- `tts.py`, `tts/`: the Tabletop Simulator card list, the Lua added to the table, `patch.py`
-
-## Tabletop Simulator
-
-The Workshop table "Riftbound - LGS Table" types every card into a Lua list by hand, so new cards arrive days after a
-release, and its EQ, ✦ and Might buttons only work where someone filled in the card's notes. `tts.py` makes that list
-from Piltover Archive instead (`tts/cards.json`, served at https://rb.raumi.dev/tts/cards.json, synced weekly):
-
-- every printing, with the table's own picture where it has one and Piltover's otherwise
-- EQ on every gear that attaches, with its Might bonus (`mightBonus`); buffs work the same way
-- ✦ for the tokens, buffs, Empower and XP a card's text makes
-- Might on every unit; legends and champion units know their champion
-- "TTS code" ids for new printings (and the table's duplicate ids fixed: `OGN-007-1` is the plain rune again)
-
-```sh
-python3 tts/patch.py   # copy of the installed Workshop table that downloads tts/cards.json when it loads
-```
-
-Load "Riftbound LGS Table (auto)" under Games → Save & Load. The copy also has a U/G button on gear that turns it into
-a unit with Might equal to its Energy (Orianna), and fixes for bugs in the table's scripts (`FIXES` in `patch.py`:
-"Reveal 1"/Numpad 4 did nothing, drawing/glimpsing/revealing the last card of a deck failed, recycling a rune renamed the
-rune deck to "main", "Toggle Analytics" was ignored). Re-run `patch.py` after the Workshop table updates; `--diff` lists
-where the generated notes differ from the table's. Hand fixes go in `tts/overrides.json`.
 
 ## Legal
 
