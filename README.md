@@ -44,3 +44,9 @@ folding, hiding tokens/runes, domain order. Edit and reload.
 - `sync.py`: fetch, fold printings into cards, link champions, write `web/cards.js`
 - `web/app.js`: query parser, filters, sorting, grouping, rendering
 - `web/index.html`, `web/style.css` (Catppuccin Mocha)
+
+## Legal
+
+Riftbound card search isn't endorsed by Riot Games and doesn't reflect the views or opinions of Riot Games or anyone officially involved in producing or managing Riot Games properties. Riot Games, Riftbound, League of Legends and all associated properties are trademarks or registered trademarks of Riot Games, Inc.
+
+This is an unofficial fan project, created under Riot Games' "Legal Jibber Jabber" policy using assets owned by Riot Games.

@@ -81,3 +81,5 @@ dialog .prints { display: flex; flex-direction: column; gap: .3rem; }
 .pr.on { border-color: var(--accent); }
 
 footer { color: var(--overlay); font-size: 12px; padding: 1rem; text-align: center; }
+footer p { margin: .3rem auto; max-width: 60rem; }
+footer .legal { font-size: 11px; }
