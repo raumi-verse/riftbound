@@ -28,8 +28,9 @@ const FIELDS = {
   num: "num", cn: "num",
   is: "is",
   has: "has",
+  for: "for", legend: "for",
 };
-const DIRECTIVES = ["sort", "group", "show", "view"];
+const DIRECTIVES = ["sort", "group", "order", "show", "view"];
 // has:legend / has:unit / has:signature = the card's champion has such a card
 const HAS_ROLE = { legend: 0, unit: 1, units: 1, signature: 2, signatures: 2 };
 const CHAMP_ROLES = new Map();
@@ -37,6 +38,21 @@ for (const c of CARDS) if (c.champion) {
   if (!CHAMP_ROLES.has(c.champion)) CHAMP_ROLES.set(c.champion, new Set());
   CHAMP_ROLES.get(c.champion).add(c.role);
 }
+// for:jinx = cards a deck with that legend may contain: the legend itself, nothing outside its
+// domains, signatures only of its champion, no tokens. Champion name or part of the legend's name.
+const LEGENDS = CARDS.filter((c) => c.type === "Legend");
+function legendsFor(v) {
+  if (v.re) return LEGENDS.filter((l) => v.re.test(l.name));
+  const byChamp = LEGENDS.filter((l) => l.champion.toLowerCase() === v.s);
+  return byChamp.length ? byChamp : LEGENDS.filter((l) => l.name.toLowerCase().includes(v.s));
+}
+function playable(r, l) {
+  if (r.type === "Legend") return r.id === l.id;
+  if (r.supertype === "Token") return false;
+  if (r.supertype === "Signature" && r.champion !== l.champion) return false;
+  return r.domains.every((d) => l.domains.includes(d));
+}
+
 const IS = {
   alt: (r) => r.prints.some((p) => p.alt),
   overnumbered: (r) => r.prints.some((p) => p.overnumbered),
@@ -73,7 +89,15 @@ function tokenize(q) {
       i = TERM.lastIndex;
       const [, f, op, raw] = m;
       if (DIRECTIVES.includes(f)) { dirs[f] = raw.toLowerCase(); continue; }
-      try { toks.push({ k: "term", f: FIELDS[f], op, v: parseValue(raw), src: m[0] }); }
+      try {
+        const t = { k: "term", f: FIELDS[f], op, v: parseValue(raw), src: m[0] };
+        if (t.f === "for") {
+          t.legends = legendsFor(t.v);
+          if (!t.legends.length) errors.push(`no legend matches "${t.v.shown}"`);
+          else t.v.shown = t.legends.map((l) => l.name).join(" / ");
+        }
+        toks.push(t);
+      }
       catch (e) { errors.push(`bad regex in ${m[0]}`); }
       continue;
     }
@@ -189,6 +213,7 @@ function test(node, r) {
   if (f === "energy" || f === "might" || f === "power") return numMatch(r[f], op, v);
   if (f === "num") return r.prints.some((p) => numMatch(p.num, op, v));
   if (f === "domain") return domainMatch(r, op, v);
+  if (f === "for") return node.legends.some((l) => playable(r, l));
   if (f === "has") {
     const yes = !!r.champion && CHAMP_ROLES.get(r.champion).has(HAS_ROLE[v.s]);
     return op === "!=" ? !yes : yes;
@@ -226,12 +251,12 @@ function cmp(a, b) {
   return a < b ? -1 : a > b ? 1 : 0;
 }
 
-function sorter(spec, errors) {
+function sorter(spec, errors, table = SORT_KEYS) {
   const keys = spec.split(",").filter(Boolean).map((k) => {
     const desc = k.startsWith("-");
     const name = k.replace(/^-/, "");
-    if (!SORT_KEYS[name]) { errors.push(`unknown sort key "${name}"`); return null; }
-    return { fn: SORT_KEYS[name], desc };
+    if (!table[name]) { errors.push(`unknown sort key "${name}"`); return null; }
+    return { fn: table[name], desc };
   }).filter(Boolean);
   return (a, b) => {
     for (const { fn, desc } of keys) {
@@ -279,7 +304,16 @@ function run(q) {
       if (!by.has(k)) by.set(k, []);
       by.get(k).push(r);
     }
-    sections = [...by.keys()].sort((a, b) => cmp(g.order(a), g.order(b))).map((k) => ({ label: g.label(k), rows: by.get(k), group }));
+    sections = [...by.keys()].sort((a, b) => cmp(g.order(a), g.order(b))).map((k) => ({ key: k, label: g.label(k), rows: by.get(k), group }));
+    if (dirs.order) {
+      // order: sorts the groups: by name, by size, or by any card key of the group's first card
+      // (in group:champion that's the legend, so order:domain sorts champions by their legend's domains)
+      const table = { name: (s) => s.label.toLowerCase(), count: (s) => s.rows.length };
+      for (const [k, fn] of Object.entries(SORT_KEYS)) table[k] ??= (s) => fn(s.rows[0]);
+      const by = sorter(dirs.order, errors, table);
+      const last = (s) => (s.group === "champion" && !s.key ? 1 : 0); // "No champion" stays at the end
+      sections.sort((a, b) => last(a) - last(b) || by(a, b));
+    }
   }
   return { sections, count: list.length, tree, dirs, errors, view: dirs.view || view };
 }

@@ -24,10 +24,12 @@
         <tr><td><code>champ:</code></td><td>champion (legend, champion units, signatures, cards with the tag) · <code>champ="lee sin"</code> exact</td></tr>
         <tr><td><code>tag:</code> <code>o:</code> <code>kw:</code></td><td>tag · rules text · keyword (<code>kw:accelerate</code>, <code>kw:level</code>)</td></tr>
         <tr><td><code>r: set: a: f: num:</code></td><td>rarity · set (OGN, SFD, UNL, VEN, OPP…) · artist · flavour · collector number</td></tr>
+        <tr><td><code>for:</code></td><td>playable with a legend: within its domains, only its own signatures · <code>for:jinx</code> <code>for:"wuju bladesman"</code></td></tr>
         <tr><td><code>has:</code></td><td>the card's champion has a <code>legend</code>, <code>unit</code> or <code>signature</code>: <code>group:champion has:legend</code></td></tr>
         <tr><td><code>is:</code></td><td>alt, overnumbered, metal, sigprint, promo, reprint, token, champion, landscape</td></tr>
         <tr><td><code>sort:</code></td><td><code>sort:domain,energy,-might,name</code> — keys: name e m p type domain rarity set champion role</td></tr>
         <tr><td><code>group:</code></td><td>champion, type, domain, set, rarity</td></tr>
+        <tr><td><code>order:</code></td><td>order of the groups: <code>name</code>, <code>count</code>, or a sort key of each group's first card (with group:champion: its legend) · <code>group:champion order:domain,-count</code></td></tr>
         <tr><td><code>show:printings</code></td><td>every printing as its own entry</td></tr>
         <tr><td><code>view:list</code></td><td>or <code>view:grid</code></td></tr>
       </table>

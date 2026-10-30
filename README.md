@@ -20,6 +20,8 @@ Press `/` to focus the search; the `?` button has the full cheat sheet. The quer
 | `group:champion` | every champion: legend, champion units, signatures, other cards with the tag |
 | `champ:jinx` / `champ="lee sin"` | one champion's cards |
 | `group:champion has:legend` | only champions that have a legend |
+| `for:jinx group:type` | everything a Jinx deck may play: her domains, her signatures, battlefields |
+| `group:champion order:domain,-count` | sort the groups themselves (`sort:` orders the cards inside) |
 | `d<=fury,chaos t:unit m>=5 sort:energy` | big units playable in a Fury/Chaos deck |
 | `kw:accelerate e<=3` | cheap units with Accelerate |
 | `o:/when you conquer/ sort:-might view:list` | rules text regex, list view |

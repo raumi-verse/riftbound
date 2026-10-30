@@ -111,7 +111,7 @@ def build(items, sets):
             "role": role,
             "type": typ,
             "supertype": c["supertype"],
-            "domains": c["domain"] or [],
+            "domains": [d for d in c["domain"] or [] if d != "Colorless"],  # battlefields say "Colorless"
             "energy": base["attributes"]["energy"],
             "might": base["attributes"]["might"],
             "power": base["attributes"]["power"],
