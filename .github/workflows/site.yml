@@ -38,9 +38,16 @@ jobs:
             git push
           fi
 
+      # rb.raumi.dev/search/ is the browser; the root only forwards there (room for other pages later)
+      - name: Lay out the site
+        run: |
+          mkdir -p _site
+          cp -r web _site/search
+          printf '<!DOCTYPE html><meta charset="utf-8"><title>Riftbound</title><meta http-equiv="refresh" content="0; url=search/"><a href="search/">Riftbound card search</a>\n' > _site/index.html
+
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: web
+          path: _site
       - id: deployment
         uses: actions/deploy-pages@v4

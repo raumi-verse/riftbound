@@ -9,7 +9,7 @@ python3 sync.py --images   # also keep the card pictures in web/img/ for offline
 xdg-open web/index.html    # the page; nothing runs in the background
 ```
 
-Hosted at https://raumi-verse.github.io/riftbound/; a GitHub Action syncs the cards every Monday (or on "Run workflow").
+Hosted at https://rb.raumi.dev/search/; a GitHub Action syncs the cards every Monday (or on "Run workflow").
 Card data and pictures come from the unofficial [Piltover Archive](https://piltoverarchive.com) API (Riftcodex lacked
 Radiance and the Nexus Night/Worlds printings).
 
