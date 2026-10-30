@@ -73,6 +73,7 @@ dialog .info { flex: 1; overflow: auto; }
 dialog h2 { margin: 0 0 .3rem; }
 dialog .line { color: var(--subtext); margin: 0 0 .8rem; }
 dialog .tx { font-size: 15px; line-height: 1.55; }
+dialog .banned { color: var(--red); font-weight: 600; margin: -.4rem 0 .8rem; }
 dialog .flav { font-style: italic; color: var(--overlay); }
 dialog .prints { display: flex; flex-direction: column; gap: .3rem; }
 .pr { text-align: left; font: inherit; background: var(--surface0); color: var(--text); border: 1px solid transparent; border-radius: 6px; padding: .3rem .6rem; cursor: pointer; }

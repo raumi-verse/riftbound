@@ -4,12 +4,14 @@ My own Riftbound card browser: every card in one local file, a search box with a
 and grouping, in particular **each champion's legend, champion units and signatures together**.
 
 ```sh
-python3 sync.py            # pull all cards from Riftcodex into web/cards.js (~2 min, run again after a new set)
+python3 sync.py            # pull all cards from Piltover Archive into web/cards.js (a few seconds)
 python3 sync.py --images   # also keep the card pictures in web/img/ for offline use
 xdg-open web/index.html    # the page; nothing runs in the background
 ```
 
-Card data comes from the unofficial [Riftcodex](https://riftcodex.com) API; pictures from Riot's CDN.
+Hosted at https://raumi-verse.github.io/riftbound/; a GitHub Action syncs the cards every Monday (or on "Run workflow").
+Card data and pictures come from the unofficial [Piltover Archive](https://piltoverarchive.com) API (Riftcodex lacked
+Radiance and the Nexus Night/Worlds printings).
 
 ## Searching
 
@@ -19,8 +21,9 @@ Press `/` to focus the search; the `?` button has the full cheat sheet. The quer
 |---|---|
 | `group:champion` | every champion: legend, champion units, signatures, other cards with the tag |
 | `champ:jinx` / `champ="lee sin"` | one champion's cards |
-| `group:champion has:legend` | only champions that have a legend |
-| `for:jinx group:type` | everything a Jinx deck may play: her domains, her signatures, battlefields |
+| `group:champion has:legend` | only champions that have a legend (`has:` filters groups, `is:` cards) |
+| `group:champion has:(t:legend d:fury)` | champions whose legend is Fury |
+| `for:jinx group:type` | everything a Jinx deck may play: her domains, neutral cards, her signatures, battlefields, nothing banned |
 | `group:champion order:domain,-count` | sort the groups themselves (`sort:` orders the cards inside) |
 | `d<=fury,chaos t:unit m>=5 sort:energy` | big units playable in a Fury/Chaos deck |
 | `kw:accelerate e<=3` | cheap units with Accelerate |

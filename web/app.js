@@ -27,17 +27,12 @@ const FIELDS = {
   p: "power", power: "power",
   num: "num", cn: "num",
   is: "is",
-  has: "has",
   for: "for", legend: "for",
 };
 const DIRECTIVES = ["sort", "group", "order", "show", "view"];
-// has:legend / has:unit / has:signature = the card's champion has such a card
-const HAS_ROLE = { legend: 0, unit: 1, units: 1, signature: 2, signatures: 2 };
-const CHAMP_ROLES = new Map();
-for (const c of CARDS) if (c.champion) {
-  if (!CHAMP_ROLES.has(c.champion)) CHAMP_ROLES.set(c.champion, new Set());
-  CHAMP_ROLES.get(c.champion).add(c.role);
-}
+// has: filters groups (needs group:): keep a group if one of its cards matches. Short forms below,
+// anything else in brackets: has:(t:legend d:fury). Card properties are is:.
+const HAS_SHORT = { legend: "t:legend", unit: "st:champion t:unit", units: "st:champion t:unit", signature: "st:signature", signatures: "st:signature", banned: "is:banned" };
 // for:jinx = cards a deck with that legend may contain: the legend itself, nothing outside its
 // domains, signatures only of its champion, no tokens. Champion name or part of the legend's name.
 const LEGENDS = CARDS.filter((c) => c.type === "Legend");
@@ -48,7 +43,7 @@ function legendsFor(v) {
 }
 function playable(r, l) {
   if (r.type === "Legend") return r.id === l.id;
-  if (r.supertype === "Token") return false;
+  if (r.supertype === "Token" || r.banned) return false;
   if (r.supertype === "Signature" && r.champion !== l.champion) return false;
   return r.domains.every((d) => l.domains.includes(d));
 }
@@ -57,11 +52,14 @@ const IS = {
   alt: (r) => r.prints.some((p) => p.alt),
   overnumbered: (r) => r.prints.some((p) => p.overnumbered),
   promo: (r) => r.prints.some((p) => p.promo),
-  metal: (r) => r.prints.some((p) => p.kind === "Metal"),
   sigprint: (r) => r.prints.some((p) => p.signature),
   reprint: (r) => new Set(r.printings.map((p) => p.set)).size > 1,
   token: (r) => r.supertype === "Token",
-  champion: (r) => !!r.champion,
+  legend: (r) => r.type === "Legend",
+  champion: (r) => r.supertype === "Champion", // champion units
+  signature: (r) => r.supertype === "Signature",
+  linked: (r) => !!r.champion, // belongs to a champion (legend, units, signatures, tagged cards)
+  banned: (r) => !!r.banned,
   landscape: (r) => r.landscape,
 };
 const TERM = /([a-z]+)(!=|<=|>=|:|=|<|>)("[^"]*"?|\/(?:\\.|[^/])*\/?|[^\s()]*)/y;
@@ -76,13 +74,34 @@ function parseValue(v) {
 }
 
 function tokenize(q) {
-  const toks = [], dirs = {}, errors = [];
+  const toks = [], dirs = {}, errors = [], has = [];
   let i = 0;
   while (i < q.length) {
     const c = q[i];
     if (/\s/.test(c)) { i++; continue; }
     if (c === "(" || c === ")") { toks.push({ k: c }); i++; continue; }
     if (c === "-" && q[i + 1] && !/\s/.test(q[i + 1])) { toks.push({ k: "not" }); i++; continue; }
+    const hm = /has([:=])/y;
+    hm.lastIndex = i;
+    if (hm.exec(q)) {
+      // has:legend or has:( … ): a group filter, kept out of the card query
+      let j = hm.lastIndex, raw;
+      if (q[j] === "(") {
+        let depth = 0, k = j;
+        for (; k < q.length; k++) { if (q[k] === "(") depth++; else if (q[k] === ")" && --depth === 0) break; }
+        raw = q.slice(j + 1, k);
+        i = k + 1;
+      } else {
+        raw = q.slice(j).match(/^[^\s()]*/)[0];
+        i = j + raw.length;
+        raw = HAS_SHORT[raw.toLowerCase()] || (raw ? (errors.push(`has:${raw}? use has:legend, unit, signature, banned or has:( … )`), "") : "");
+      }
+      const neg = toks.length && toks[toks.length - 1].k === "not" ? !!toks.pop() : false;
+      const sub = tokenize(raw);
+      errors.push(...sub.errors);
+      if (raw) has.push({ neg, tree: parse(sub.toks), shown: raw });
+      continue;
+    }
     TERM.lastIndex = i;
     const m = TERM.exec(q);
     if (m && (FIELDS[m[1]] || DIRECTIVES.includes(m[1]))) {
@@ -116,7 +135,7 @@ function tokenize(q) {
     try { toks.push({ k: "term", f: "any", op: ":", v: parseValue(word), src: word }); }
     catch (e) { errors.push(`bad regex ${word}`); }
   }
-  return { toks, dirs, errors };
+  return { toks, dirs, errors, has };
 }
 
 // expr = and ("or" and)* ; and = unary+ ; unary = "-" unary | "(" expr ")" | term
@@ -214,10 +233,6 @@ function test(node, r) {
   if (f === "num") return r.prints.some((p) => numMatch(p.num, op, v));
   if (f === "domain") return domainMatch(r, op, v);
   if (f === "for") return node.legends.some((l) => playable(r, l));
-  if (f === "has") {
-    const yes = !!r.champion && CHAMP_ROLES.get(r.champion).has(HAS_ROLE[v.s]);
-    return op === "!=" ? !yes : yes;
-  }
   if (f === "is") { const fn = IS[v.s]; return fn ? (op === "!=" ? !fn(r) : fn(r)) : false; }
   if (["<", "<=", ">", ">="].includes(op)) return false;
   return strMatch(fieldValues(r, f), op, v, f);
@@ -284,14 +299,28 @@ function rows(expand) {
 const FOLDED = rows(false), EXPANDED = rows(true);
 
 function run(q) {
-  const { toks, dirs, errors } = tokenize(q.trim() || S.defaultQuery);
+  const { toks, dirs, errors, has } = tokenize(q.trim() || S.defaultQuery);
   const tree = parse(toks);
   const expand = dirs.show ? dirs.show.startsWith("print") : !S.foldPrintings;
-  let list = (expand ? EXPANDED : FOLDED).filter((r) => test(tree, r));
-  if (S.hideTokensAndRunes && !/token|rune|basic/i.test(q)) list = list.filter((r) => r.supertype !== "Token" && r.type !== "Rune");
+  let all = expand ? EXPANDED : FOLDED;
+  if (S.hideTokensAndRunes && !/token|rune|basic/i.test(q)) all = all.filter((r) => r.supertype !== "Token" && r.type !== "Rune");
+  let list = all.filter((r) => test(tree, r));
 
   const group = dirs.group && GROUPS[dirs.group] ? dirs.group : null;
   if (dirs.group && !group) errors.push(`can't group by "${dirs.group}" (champion, type, domain, set, rarity)`);
+  if (has.length && !group) errors.push("has: filters groups, add group:champion (or another group:)");
+  if (has.length && group) {
+    // judged on the whole group, not only the cards the rest of the query left
+    const g = GROUPS[group], members = new Map();
+    for (const r of all) {
+      const k = g.key(r);
+      if (!members.has(k)) members.set(k, []);
+      members.get(k).push(r);
+    }
+    const keep = new Set([...members].filter(([k, rs]) => (group !== "champion" || k) &&
+      has.every((h) => rs.some((r) => test(h.tree, r)) !== h.neg)).map(([k]) => k));
+    list = list.filter((r) => keep.has(g.key(r)));
+  }
   let spec = dirs.sort || S.defaultSort;
   if (group === "champion") spec = "role," + (dirs.sort || S.championSort);
   list.sort(sorter(spec, errors));
@@ -315,7 +344,7 @@ function run(q) {
       sections.sort((a, b) => last(a) - last(b) || by(a, b));
     }
   }
-  return { sections, count: list.length, tree, dirs, errors, view: dirs.view || view };
+  return { sections, count: list.length, tree, has, dirs, errors, view: dirs.view || view };
 }
 
 // ---------- rendering ----------
@@ -373,6 +402,7 @@ function explain(n, top) {
 
 function chips(res) {
   const out = [explain(res.tree, true)];
+  for (const h of res.has) out.push(`<span class="chip dir">${h.neg ? "groups without" : "groups with"}: ${esc(h.shown)}</span>`);
   for (const [k, v] of Object.entries(res.dirs)) out.push(`<span class="chip dir">${k}: ${esc(v)}</span>`);
   for (const e of res.errors) out.push(`<span class="chip err">${esc(e)}</span>`);
   return out.join("");
@@ -411,6 +441,7 @@ function detail(r) {
   d.querySelector(".info").innerHTML = `
     <h2>${esc(r.name)}</h2>
     <p class="line">${dots(r.domains)} ${esc([r.supertype, r.type].filter(Boolean).join(" "))}${stats ? ` · ${stats}` : ""}</p>
+    ${r.banned ? `<p class="banned">Banned since ${esc(r.banned.slice(0, 10))}</p>` : ""}
     <div class="tx">${richText(r.text)}</div>
     ${r.flavour ? `<p class="flav">${esc(r.flavour)}</p>` : ""}
     <p class="tags">${r.champion ? `Champion: ${qlink(`champ="${r.champion}" group:champion`, r.champion)} · ` : ""}${r.tags.filter((t) => t !== r.champion).map((t) => qlink(`tag="${t}"`, t)).join(", ")}</p>
