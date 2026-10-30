@@ -27,8 +27,16 @@ const FIELDS = {
   p: "power", power: "power",
   num: "num", cn: "num",
   is: "is",
+  has: "has",
 };
 const DIRECTIVES = ["sort", "group", "show", "view"];
+// has:legend / has:unit / has:signature = the card's champion has such a card
+const HAS_ROLE = { legend: 0, unit: 1, units: 1, signature: 2, signatures: 2 };
+const CHAMP_ROLES = new Map();
+for (const c of CARDS) if (c.champion) {
+  if (!CHAMP_ROLES.has(c.champion)) CHAMP_ROLES.set(c.champion, new Set());
+  CHAMP_ROLES.get(c.champion).add(c.role);
+}
 const IS = {
   alt: (r) => r.prints.some((p) => p.alt),
   overnumbered: (r) => r.prints.some((p) => p.overnumbered),
@@ -181,6 +189,10 @@ function test(node, r) {
   if (f === "energy" || f === "might" || f === "power") return numMatch(r[f], op, v);
   if (f === "num") return r.prints.some((p) => numMatch(p.num, op, v));
   if (f === "domain") return domainMatch(r, op, v);
+  if (f === "has") {
+    const yes = !!r.champion && CHAMP_ROLES.get(r.champion).has(HAS_ROLE[v.s]);
+    return op === "!=" ? !yes : yes;
+  }
   if (f === "is") { const fn = IS[v.s]; return fn ? (op === "!=" ? !fn(r) : fn(r)) : false; }
   if (["<", "<=", ">", ">="].includes(op)) return false;
   return strMatch(fieldValues(r, f), op, v, f);
