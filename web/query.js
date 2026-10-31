@@ -341,15 +341,20 @@ function rows(expand) {
   if (!expand) return CARDS.map((c) => ({ ...c, prints: c.printings, p: c.printings[0] }));
   return CARDS.flatMap((c) => c.printings.map((p) => ({ ...c, prints: [p], p, rarity: p.rarity })));
 }
-const FOLDED = rows(false), EXPANDED = rows(true);
+const FOLDED = rows(false), EXPANDED = rows(true), FOLDED_BY_ID = new Map(FOLDED.map((r) => [r.id, r]));
 
 function run(q, view = S.view) {
   const { toks, dirs, errors, has } = tokenize(q.trim() || S.defaultQuery);
   const tree = parse(toks);
   const expand = dirs.show ? dirs.show.startsWith("print") : !S.foldPrintings;
-  let all = expand ? EXPANDED : FOLDED;
-  if (S.hideTokensAndRunes && !/token|rune|basic/i.test(q)) all = all.filter((r) => r.supertype !== "Token" && r.type !== "Rune");
+  // judged per printing; folded, a card shows its first printing that matches (r:showcase shows the showcase art)
+  let all = EXPANDED;
+  if (S.hideTokensAndRunes && !/token|rune|basic|\bid[:=]/i.test(q)) all = all.filter((r) => r.supertype !== "Token" && r.type !== "Rune");
   let list = all.filter((r) => test(tree, r));
+  if (!expand) {
+    const seen = new Set();
+    list = list.filter((r) => !seen.has(r.id) && seen.add(r.id)).map((r) => ({ ...FOLDED_BY_ID.get(r.id), p: r.p }));
+  }
 
   const group = dirs.group && GROUPS[dirs.group] ? dirs.group : null;
   if (dirs.group && !group) errors.push(`can't group by "${dirs.group}" (champion, type, domain, set, rarity)`);

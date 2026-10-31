@@ -129,3 +129,13 @@ test("stats of the results", () => {
   assert.equal(stats(res("t:legend").sections[0].rows).energy, undefined);
   assert.deepEqual(stats([]), {});
 });
+
+test("folded, a card shows the printing that matched", () => {
+  const rows = (q) => res(q).sections.flatMap((s) => s.rows);
+  for (const [q, ok] of [["r:showcase", (p) => p.rarity === "Showcase"], ["s:sfd", (p) => p.set === "SFD"], ["is:alt", (p) => p.alt]]) {
+    const folded = rows(q);
+    assert.ok(folded.every((r) => ok(r.p)), q);
+    assert.equal(folded.length, new Set(rows(`${q} show:printings`).map((r) => r.id)).size, q);
+    assert.ok(folded.every((r) => r.printings.length === r.prints.length), q); // the dialog still lists every printing
+  }
+});
