@@ -27,6 +27,8 @@ energy, type, rarity, plus legend (`for:`), keyword, set, sort and grouping. It 
 | `champ:jinx` / `champ="lee sin"` | one champion's cards |
 | `group:champion has:legend` | only champions that have a legend (`has:` filters groups, `is:` cards) |
 | `group:champion has:(t:legend d:fury)` | champions whose legend is Fury |
+| `champ:(t:legend d:calm)` | every card of the champions whose legend is Calm (no `group:` needed) |
+| `for:(t:legend d:fury) t:unit e<=2` | cheap units any Fury legend may play |
 | `for:jinx group:type` | everything a Jinx deck may play: her domains, neutral cards, her signatures, battlefields, nothing banned |
 | `group:champion order:domain,-count` | sort the groups themselves (`sort:` orders the cards inside) |
 | `d<=fury,chaos t:unit m>=5 sort:energy` | big units playable in a Fury/Chaos deck |

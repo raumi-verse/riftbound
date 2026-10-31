@@ -23,10 +23,10 @@
         <tr><td><code>d:</code> domain</td><td><code>d:fury</code> has Fury · <code>d:fury,chaos</code> has both · <code>d=fury,chaos</code> exactly · <code>d&lt;=fury,chaos</code> playable in Fury/Chaos · <code>d:colorless</code></td></tr>
         <tr><td><code>e m p</code></td><td>energy, might, power: <code>e&lt;=3</code> <code>m&gt;=4</code> <code>p=1</code> <code>e:7+</code> (7 or more)</td></tr>
         <tr><td><code>a|b</code></td><td>any of them, in any field: <code>t:unit|gear</code> <code>d:fury|chaos</code> <code>e:1|2|3</code> <code>kw:tank|shield</code> <code>for:jinx|viktor</code></td></tr>
-        <tr><td><code>champ:</code></td><td>champion (legend, champion units, signatures, cards with the tag) · <code>champ="lee sin"</code> exact</td></tr>
+        <tr><td><code>champ:</code></td><td>champion (legend, champion units, signatures, cards with the tag) · <code>champ="lee sin"</code> exact · <code>champ:(t:legend d:calm)</code> champions with a card the query matches</td></tr>
         <tr><td><code>tag:</code> <code>o:</code> <code>kw:</code></td><td>tag · rules text · keyword (<code>kw:accelerate</code>, <code>kw:level</code>)</td></tr>
         <tr><td><code>r: set: a: f: num:</code></td><td>rarity · set (OGN, SFD, UNL, VEN, OPP…) · artist · flavour · collector number</td></tr>
-        <tr><td><code>for:</code></td><td>playable with a legend: within its domains (neutral cards always), only its own signatures, nothing banned · <code>for:jinx</code> <code>for:"wuju bladesman"</code></td></tr>
+        <tr><td><code>for:</code></td><td>playable with a legend: within its domains (neutral cards always), only its own signatures, nothing banned · <code>for:jinx</code> <code>for:"wuju bladesman"</code> · <code>for:(d:fury)</code> any legend the query matches</td></tr>
         <tr><td><code>has:</code></td><td>groups (with <code>group:</code>) that contain such a card: <code>has:legend</code> <code>has:unit</code> <code>has:signature</code> <code>has:banned</code> <code>has:(t:legend d:fury)</code>; <code>-has:</code> for groups without</td></tr>
         <tr><td><code>is:</code></td><td>the card: legend, champion (unit), signature, linked (belongs to a champion), banned, token · printings: alt, overnumbered, sigprint, promo, reprint · landscape</td></tr>
         <tr><td><code>sort:</code></td><td><code>sort:domain,energy,-might,name</code> — keys: name e m p type domain rarity set champion role</td></tr>

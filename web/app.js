@@ -73,6 +73,25 @@ function parseValue(v) {
   return { s: v.toLowerCase(), shown: v };
 }
 
+// q[j] is "(": the text up to its ")" and the index after it
+function bracket(q, j) {
+  let depth = 0, k = j;
+  for (; k < q.length; k++) { if (q[k] === "(") depth++; else if (q[k] === ")" && --depth === 0) break; }
+  return [q.slice(j + 1, k), k + 1];
+}
+
+// A card query inside a field, judged against all cards: for:( … ) the legends it matches,
+// champ:( … ) the champions that have a card it matches.
+const SUBQUERY = /(for|legend|ch|champ|champion)(!=|:|=)\(/y;
+function subquery(f, raw, errors) {
+  const sub = tokenize(raw);
+  errors.push(...sub.errors);
+  if (sub.has.length || Object.keys(sub.dirs).length) errors.push(`${f}:( … ) only takes card terms, no has:, sort:, group: …`);
+  const tree = parse(sub.toks);
+  if (f === "for") return { legends: FOLDED.filter((r) => r.type === "Legend" && test(tree, r)) };
+  return { champs: new Set(FOLDED.filter((r) => r.champion && test(tree, r)).map((r) => r.champion)) };
+}
+
 function tokenize(q) {
   const toks = [], dirs = {}, errors = [], has = [];
   let i = 0;
@@ -87,10 +106,7 @@ function tokenize(q) {
       // has:legend or has:( … ): a group filter, kept out of the card query
       let j = hm.lastIndex, raw;
       if (q[j] === "(") {
-        let depth = 0, k = j;
-        for (; k < q.length; k++) { if (q[k] === "(") depth++; else if (q[k] === ")" && --depth === 0) break; }
-        raw = q.slice(j + 1, k);
-        i = k + 1;
+        [raw, i] = bracket(q, j);
       } else {
         raw = q.slice(j).match(/^[^\s()]*/)[0];
         i = j + raw.length;
@@ -100,6 +116,18 @@ function tokenize(q) {
       const sub = tokenize(raw);
       errors.push(...sub.errors);
       if (raw) has.push({ neg, tree: parse(sub.toks), shown: raw });
+      continue;
+    }
+    SUBQUERY.lastIndex = i;
+    const sm = SUBQUERY.exec(q);
+    if (sm) {
+      const f = FIELDS[sm[1]], [raw, end] = bracket(q, SUBQUERY.lastIndex - 1);
+      i = end;
+      const t = { k: "term", f, op: sm[2], v: { shown: `(${raw})` }, ...subquery(f, raw, errors) };
+      const found = f === "for" ? t.legends.map((l) => l.name) : [...t.champs];
+      if (!found.length) errors.push(`no ${f === "for" ? "legend" : "champion"} matches ${f}:(${raw})`);
+      else t.v.shown += found.length <= 3 ? `: ${found.join(" / ")}` : `: ${found.length} ${f === "for" ? "legends" : "champions"}`;
+      toks.push(t);
       continue;
     }
     TERM.lastIndex = i;
@@ -232,7 +260,8 @@ function test(node, r) {
   if (node.and) return node.and.every((n) => test(n, r));
   if (node.not) return !test(node.not, r);
   const { f, op, v } = node;
-  if (f === "for") return node.legends.some((l) => playable(r, l));
+  if (f === "for") return node.legends.some((l) => playable(r, l)) !== (op === "!=");
+  if (node.champs) return node.champs.has(r.champion) !== (op === "!=");
   if (node.alts) {
     const neg = op === "!=";
     const any = node.alts.some((a) => test({ ...node, op: neg ? "=" : op, v: a, alts: null }, r));
