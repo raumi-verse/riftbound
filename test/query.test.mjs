@@ -139,3 +139,21 @@ test("folded, a card shows the printing that matched", () => {
     assert.ok(folded.every((r) => r.printings.length === r.prints.length), q); // the dialog still lists every printing
   }
 });
+
+test("ranges and printing ids", () => {
+  same("t:unit e:2..4", "t:unit e>=2 e<=4");
+  same("t:unit e:2-4", "t:unit e:2..4");
+  same("t:unit e!=2..4", "t:unit -e:2..4");
+  same("t:unit e:1|3..5", "t:unit (e:1 or e>=3 e<=5)");
+  same("num:1..10 s:ogn", "num>=1 num<=10 s:ogn");
+  for (const q of ["m>2..4", "e!=7+", "id:ogn-1..x"]) assert.ok(run(q).errors.length, q);
+  const pids = (q) => plain(res(q).sections.flatMap((s) => s.rows.map((r) => r.p.id)));
+  assert.deepEqual(pids("id=OGN-275"), ["OGN-275"]);
+  const variants = pids("id:ogn-007 show:printings");
+  assert.ok(variants.includes("OGN-007") && variants.includes("OGN-007a"), variants);
+  assert.ok(variants.every((id) => /^OGN-007(\D|$)/.test(id)), variants);
+  const range = pids("id:ogn-270..280 show:printings");
+  assert.ok(range.length > 5 && range.every((id) => /^OGN-(\d+)/.exec(id)[1] >= 270 && /^OGN-(\d+)/.exec(id)[1] <= 280), range);
+  same("id:ogn-270..ogn-280", "id:ogn-270..280");
+  assert.deepEqual(pids("id=SFD-R01"), ["SFD-R01"]); // a rune, though the settings hide runes
+});

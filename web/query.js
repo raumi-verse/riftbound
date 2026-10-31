@@ -27,6 +27,7 @@ const FIELDS = {
   m: "might", might: "might",
   p: "power", power: "power",
   num: "num", cn: "num",
+  id: "id",
   is: "is",
   for: "for", legend: "for",
 };
@@ -64,6 +65,10 @@ const IS = {
   landscape: (r) => r.landscape,
 };
 const NUMERIC = new Set(["energy", "might", "power", "num"]);
+const RANGE = /^(\d+)(?:\.\.|-)(\d+)$/; // e:2..4, e:2-4
+const ID_RANGE = /^([a-z]+)-(\d+)\.\.(?:([a-z]+)-)?(\d+)$/; // id:ogn-270..280, id:ogn-270..ogn-280
+// a number value the op can take: 3, 2.5, 7+ and ranges only with : = !=
+const numOk = (x, op) => /^\d+\+$|^\d+(\.\.|-)\d+$/.test(x) ? [":", "=", "!="].includes(op) && !(x.endsWith("+") && op === "!=") : x !== "" && !Number.isNaN(Number(x));
 const TERM = /([a-z]+)(!=|<=|>=|:|=|<|>)("[^"]*"?|\/(?:\\.|[^/])*\/?|[^\s()]*)/y;
 
 function parseValue(v) {
@@ -140,9 +145,12 @@ function tokenize(q) {
       if (DIRECTIVES.includes(f)) { dirs[f] = raw.toLowerCase(); continue; }
       try {
         const t = { k: "term", f: FIELDS[f], op, v: parseValue(raw), src: m[0] };
-        if (NUMERIC.has(t.f) && !t.v.re && !t.v.s.split("|").every((x) => /^\d+\+?$/.test(x) || (x && !Number.isNaN(Number(x))))) {
+        const bad = !t.v.re && (NUMERIC.has(t.f) ? !t.v.s.split("|").every((x) => numOk(x, op))
+          : t.f === "id" && t.v.s.split("|").some((x) => x.includes("..") && !(ID_RANGE.test(x) && [":", "="].includes(op))));
+        if (bad) {
           // m> or m>(…) would otherwise compare with Number("") = 0
-          errors.push(`${m[0]}${q[i] === "(" ? "(" : ""}? ${f}${op} needs a number, e.g. ${f}${op === ":" ? ":3" : op + "3"}`);
+          errors.push(t.f === "id" ? `${m[0]}? an id range is like id:ogn-270..280`
+            : `${m[0]}${q[i] === "(" ? "(" : ""}? ${f}${op} needs a number, e.g. ${f}${op === ":" ? ":3, :2..4" : op + "3"}`);
           if (toks.length && toks[toks.length - 1].k === "not") toks.pop();
           continue;
         }
@@ -235,6 +243,8 @@ function strMatch(vals, op, v, f) {
 
 function numMatch(x, op, v) {
   if (x != null && (op === ":" || op === "=") && /^\d+\+$/.test(v.s)) return x >= parseInt(v.s); // e:7+
+  const rg = v.s.match(RANGE);
+  if (rg) return x != null && (x >= +rg[1] && x <= +rg[2]) !== (op === "!=");
   const n = Number(v.s);
   if (x == null || Number.isNaN(n)) return false;
   switch (op) {
@@ -245,6 +255,17 @@ function numMatch(x, op, v) {
     case ">": return x > n;
     case ">=": return x >= n;
   }
+}
+
+// id:ogn-007 is that printing and its variants (OGN-007a, OGN-007-Worlds), id= exactly, id:ogn-270..280 a range
+function idMatch(r, op, v) {
+  const ids = r.prints.map((p) => p.id.toLowerCase());
+  if (v.re) return ids.some((id) => v.re.test(id));
+  const rg = v.s.match(ID_RANGE);
+  const hit = rg ? (id) => { const m = id.match(/^([a-z]+)-(\d+)/); return !!m && m[1] === rg[1] && (!rg[3] || rg[3] === rg[1]) && +m[2] >= +rg[2] && +m[2] <= +rg[4]; }
+    : op === ":" ? (id) => id === v.s || (id.startsWith(v.s) && !/\d/.test(id[v.s.length]))
+    : (id) => id === v.s;
+  return ids.some(hit) !== (op === "!=");
 }
 
 function domainMatch(r, op, v) {
@@ -277,6 +298,7 @@ function test(node, r) {
   }
   if (f === "energy" || f === "might" || f === "power") return numMatch(r[f], op, v);
   if (f === "num") return r.prints.some((p) => numMatch(p.num, op, v));
+  if (f === "id") return idMatch(r, op, v);
   if (f === "domain") return domainMatch(r, op, v);
   if (f === "is") { const fn = IS[v.s]; return fn ? (op === "!=" ? !fn(r) : fn(r)) : false; }
   if (["<", "<=", ">", ">="].includes(op)) return false;
@@ -456,7 +478,7 @@ const quoteVal = (v) => /[\s|]/.test(v) ? `"${v}"` : v;
 const FIELD_HINTS = [
   ["t:", "type"], ["st:", "supertype"], ["d:", "domain"], ["e:", "energy"], ["m:", "might"], ["p:", "power"],
   ["champ:", "champion"], ["for:", "playable with a legend"], ["tag:", "tag"], ["o:", "rules text"], ["kw:", "keyword"],
-  ["r:", "rarity"], ["set:", "set"], ["a:", "artist"], ["f:", "flavour text"], ["n:", "name"], ["num:", "collector number"],
+  ["r:", "rarity"], ["set:", "set"], ["a:", "artist"], ["f:", "flavour text"], ["n:", "name"], ["num:", "collector number"], ["id:", "printing id"],
   ["is:", "card property"], ["has:", "groups with such a card"], ["sort:", "sort the cards"], ["group:", "group by"],
   ["order:", "order the groups"], ["show:", "show:printings"], ["view:", "grid or list"],
 ];
