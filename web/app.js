@@ -153,7 +153,7 @@ function showCard(r, pos) {
   };
   const stats = r.type === "Legend" ? "" : [cost(r), /Unit/.test(r.type) && r.might != null ? `${ICONS.might()} ${r.might}` : ""].filter(Boolean).join(" · ");
   d.querySelector(".info").innerHTML = `
-    <nav class="step"><button type="button" data-step="-1" title="Previous (←)">‹</button><span>${pos || ""}</span><button type="button" data-step="1" title="Next (→)">›</button></nav>
+    <nav class="step"><button type="button" data-step="-1" title="Previous (←)">‹</button><span>${pos || ""}</span><button type="button" data-step="1" title="Next (→)">›</button><button type="button" class="close" title="Close (Esc)">✕</button></nav>
     <h2>${esc(r.name)}</h2>
     <p class="line">${dots(r.domains)} ${ICONS.type(r.type)} ${esc([r.supertype, r.type].filter(Boolean).join(" "))}${stats ? ` · ${stats}` : ""}</p>
     ${r.banned ? `<p class="banned">Banned since ${esc(r.banned.slice(0, 10))}</p>` : ""}
@@ -167,6 +167,7 @@ function showCard(r, pos) {
   d.querySelectorAll(".pr").forEach((b, i) => (b.onclick = () => show(r.printings[i])));
   d.querySelectorAll(".same button").forEach((b) => (b.onclick = () => showCard(FOLDED.find((c) => c.id === b.dataset.id), "")));
   d.querySelectorAll("[data-step]").forEach((b) => (b.onclick = () => step(Number(b.dataset.step))));
+  d.querySelector(".close").onclick = () => d.close();
   d.querySelectorAll("a").forEach((a) => a.addEventListener("click", () => d.close()));
   show(r.p);
   if (!d.open) d.showModal();
@@ -347,7 +348,9 @@ document.addEventListener("keydown", (e) => {
 });
 
 buildFilters();
-if ((localStorage.getItem("rb-filters") || (S.showFilters === false ? "off" : "on")) === "off") document.body.setAttribute("data-nofilters", "");
+// on a phone the filters start folded away, unless the Filters button opened them before
+const filtersDefault = S.showFilters === false || matchMedia("(max-width: 700px)").matches ? "off" : "on";
+if ((localStorage.getItem("rb-filters") || filtersDefault) === "off") document.body.setAttribute("data-nofilters", "");
 $("#synced").textContent = `${CARDS.length} cards · synced ${synced.slice(0, 10)}`;
 $("#q").value = decodeURIComponent(location.hash.slice(1));
 render();
