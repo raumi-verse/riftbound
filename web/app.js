@@ -268,6 +268,27 @@ $("#filters").addEventListener("change", (e) => {
   const name = { for: "for", keyword: "kw", set: "set", sort: "sort", group: "group" }[f];
   setQuery(writeTerm(q, f, v ? `${name}:${quoteVal(v)}` : ""), true);
 });
+// the results as names, ids, a link back to them or a CSV; the button says what it did for a moment
+$("#export .menu").addEventListener("click", async (e) => {
+  const b = e.target.closest("[data-export]");
+  if (!b || !current) return;
+  const kind = b.dataset.export, text = exportList(current, kind), label = b.textContent;
+  const n = kind === "names" ? text.split("\n").filter(Boolean).length : current.count;
+  try {
+    if (kind === "csv") {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(new Blob([text], { type: "text/csv" }));
+      a.download = "riftbound-cards.csv";
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+      b.textContent = `Downloaded ${n} rows`;
+    } else {
+      await navigator.clipboard.writeText(kind === "link" ? `${location.href.split("#")[0]}#${encodeURIComponent(text)}` : text);
+      b.textContent = `Copied ${n}`;
+    }
+  } catch (err) { b.textContent = "Couldn't copy"; }
+  setTimeout(() => { b.textContent = label; $("#export").open = false; }, 1200);
+});
 $("#filter-toggle").addEventListener("click", () => {
   const hidden = document.body.toggleAttribute("data-nofilters");
   localStorage.setItem("rb-filters", hidden ? "off" : "on");

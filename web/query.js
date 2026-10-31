@@ -436,6 +436,23 @@ function stats(list) {
   return out;
 }
 
+// ---------- exporting the results ----------
+// exportList(run(q), kind): the shown rows in page order. names: each name once; ids: the shown printings;
+// link: a query for exactly those printings; csv: a spreadsheet, energy and might only where the card has them.
+
+const CSV_COLS = ["name", "id", "set", "num", "rarity", "type", "supertype", "domains", "energy", "might", "power", "champion", "artist"];
+const csvCell = (x) => (x = x == null ? "" : String(x), /[",\n]/.test(x) ? `"${x.replace(/"/g, '""')}"` : x);
+function exportList(res, kind) {
+  const rows = res.sections.flatMap((s) => s.rows);
+  if (kind === "names") return uniq0(rows.map((r) => r.name)).join("\n");
+  if (kind === "ids") return rows.map((r) => r.p.id).join("\n");
+  if (kind === "link") return [`id=${rows.map((r) => r.p.id).join("|")}`, ...Object.entries(res.dirs).map(([k, v]) => `${k}:${v}`)].join(" ");
+  return [CSV_COLS, ...rows.map((r) => [r.name, r.p.id, r.p.set, r.p.num, r.p.rarity, r.type, r.supertype, r.domains.join("+"),
+    HAS_STAT.energy(r) ? r.energy : null, HAS_STAT.might(r) ? r.might : null, r.power, r.champion, r.p.artist])]
+    .map((cells) => cells.map(csvCell).join(",")).join("\r\n") + "\r\n";
+}
+const uniq0 = (xs) => [...new Set(xs)]; // in order
+
 // ---------- query terms for the filter bar ----------
 // The filter bar's buttons only write terms into the query (the query stays the one truth) and show what's in it.
 // Each control owns the first top-level term of its field, e.g. d:fury|chaos or e:2|3|8+.

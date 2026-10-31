@@ -157,3 +157,22 @@ test("ranges and printing ids", () => {
   same("id:ogn-270..ogn-280", "id:ogn-270..280");
   assert.deepEqual(pids("id=SFD-R01"), ["SFD-R01"]); // a rune, though the settings hide runes
 });
+
+test("export", () => {
+  const exportList = Q("exportList");
+  const r = res("t:battlefield s:ogn");
+  const ids = exportList(r, "ids").split("\n");
+  assert.equal(ids.length, r.count);
+  for (const q of ["t:battlefield s:ogn", "r:showcase show:printings sort:name"]) {
+    const shown = (x) => plain(x.sections.flatMap((s) => s.rows.map((row) => row.p.id)));
+    assert.deepEqual(shown(res(exportList(res(q), "link"))), shown(res(q)), q); // the link gives the same list back
+  }
+  assert.equal(exportList(res("champ:jinx show:printings"), "names").split("\n").length, res("champ:jinx").count);
+  const csv = exportList(r, "csv").trim().split("\r\n");
+  assert.equal(csv.length, r.count + 1);
+  assert.match(csv[0], /^name,id,set,num,rarity,type/);
+  assert.match(csv[1], /,Battlefield,/);
+  assert.ok(csv.slice(1).every((l) => /,Battlefield,,[^,]*,,,0,/.test(l)), "battlefields: no energy, no might"); // supertype, domains, energy, might empty
+  const tricky = exportList({ sections: [{ rows: [{ ...res("t:battlefield s:ogn").sections[0].rows[0], name: 'A "B", C' }] }] }, "csv");
+  assert.match(tricky, /^.*\r\n"A ""B"", C",/);
+});
