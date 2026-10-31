@@ -38,6 +38,9 @@ energy, type, rarity, plus legend (`for:`), keyword, set, sort and grouping. It 
 | `t:unit\|gear e:7+ kw:tank\|shield` | `a\|b` is any of them in any field, `7+` is 7 or more |
 | `show:printings is:alt` | every alternate-art printing |
 
+Click a card for its details: ←/→ step through the results, the champion's other cards are below. Hovering a
+keyword shows its reminder text.
+
 By default reprints, alternate arts, overnumbered, signature and metal prints of a card are folded into one entry
 (the details show them all). A card's champion is the champion's tag; legends and units are linked by name.
 

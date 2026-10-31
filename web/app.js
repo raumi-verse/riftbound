@@ -19,14 +19,36 @@ const ICONS = {
   type: (t) => ["legend", "unit", "spell", "gear", "battlefield", "rune"].includes(t.split(" ")[0].toLowerCase()) ? icon(`type-${t.split(" ")[0].toLowerCase()}.webp`, t, "ty") : "",
   rarity: (r) => ["common", "uncommon", "rare", "epic", "showcase"].includes(r.toLowerCase()) ? icon(`rarity-${r.toLowerCase()}.webp`, r, "ra") : "",
 };
-// [Assault 2]: its own banner, else the [Assault] banner and the number, else bold text
-function keywordBadge(k) {
-  const low = k.toLowerCase(), [, base, n] = low.match(/^(.*?)(?: (\d+))?$/);
-  if (KW_ICONS[low]) return `<img class="kwb" src="${KW_ICONS[low]}" alt="[${esc(k)}]" title="${esc(k)}">`;
-  if (KW_ICONS[base]) return `<img class="kwb" src="${KW_ICONS[base]}" alt="[${esc(k)}]" title="${esc(k)}"><b class="kwn">${n}</b>`;
-  return `<b class="kw">${esc(k)}</b>`;
+// A keyword's reminder text: the most common "(…)" right after it on the cards, "assault 2" and "assault" apart
+const REMINDERS = (() => {
+  const counts = {};
+  for (const c of CARDS) for (const [, k, t] of c.alltext.matchAll(/\[([A-Za-z][A-Za-z -]*?(?: \d+)?)\] ?\(([^)]+)\)/g)) {
+    const key = k.toLowerCase(), text = t[0].toUpperCase() + t.slice(1);
+    ((counts[key] ??= {})[text] = (counts[key][text] || 0) + 1);
+  }
+  return Object.fromEntries(Object.entries(counts).map(([k, ts]) => [k, Object.entries(ts).sort((a, b) => b[1] - a[1])[0][0]]));
+})();
+
+// The reminder for a keyword on card r: none if the card prints it, else the usual one with its runes in the
+// card's domain (Accelerate costs a rune of the card's domain)
+function reminder(low, base, r) {
+  if (r && [...r.alltext.matchAll(/\[([A-Za-z][A-Za-z -]*?(?: \d+)?)\] ?\(/g)].some((m) => m[1].toLowerCase() === low)) return null;
+  const t = REMINDERS[low] || REMINDERS[base];
+  if (!t || !r) return t;
+  return t.replace(/:rb_rune_(?!rainbow)\w+:/g, r.domains.length === 1 ? `:rb_rune_${r.domains[0].toLowerCase()}:` : ":rb_rune_rainbow:");
 }
-function richText(t) {
+// [Assault 2]: its own banner, else the [Assault] banner and the number, else bold text; hover or focus shows
+// the reminder text. r: the card (for its reminders); null for no tooltips.
+function keywordBadge(k, r) {
+  const low = k.toLowerCase(), [, base, n] = low.match(/^(.*?)(?: (\d+))?$/);
+  const tip = r !== null && reminder(low, base, r);
+  const title = tip ? "" : ` title="${esc(k)}"`;
+  const badge = KW_ICONS[low] ? `<img class="kwb" src="${KW_ICONS[low]}" alt="[${esc(k)}]"${title}>`
+    : KW_ICONS[base] ? `<img class="kwb" src="${KW_ICONS[base]}" alt="[${esc(k)}]"${title}><b class="kwn">${n}</b>`
+    : `<b class="kw">${esc(k)}</b>`;
+  return tip ? `<span class="kwt" tabindex="0">${badge}<span class="tip"><b>${esc(k)}</b> ${richText(tip, null)}</span></span>` : badge;
+}
+function richText(t, r) {
   return esc(t)
     .replace(/:rb_energy_(\d+):/g, (_, n) => ICONS.energy(n))
     .replace(/:rb_might:/g, ICONS.might)
@@ -34,7 +56,7 @@ function richText(t) {
     .replace(/:rb_rune_rainbow:/g, ICONS.rune)
     .replace(/:rb_rune_(\w+):/g, (_, d) => ICONS.domain(d))
     .replace(/\[(&gt;)+\]/g, "▶")
-    .replace(/\[([A-Za-z][A-Za-z -]*?(?: \d+)?)\]/g, (_, k) => keywordBadge(k))
+    .replace(/\[([A-Za-z][A-Za-z -]*?(?: \d+)?)\]/g, (_, k) => keywordBadge(k, r))
     .replace(/\n/g, "<br>");
 }
 
@@ -66,7 +88,7 @@ function listSection(rows) {
     <td>${dots(r.domains)}</td>
     <td class="n">${r.energy != null && r.type !== "Legend" ? ICONS.energy(r.energy) : ""}</td><td class="n">${/Unit/.test(r.type) ? r.might ?? "" : ""}</td><td class="n">${powerIcons(r)}</td>
     <td>${ICONS.rarity(r.p.rarity)} ${esc(r.p.rarity)}</td><td>${esc(r.p.set)}&nbsp;${r.p.num ?? ""}</td>
-    <td class="tx">${richText(r.text)}</td></tr>`).join("")}</tbody></table>`;
+    <td class="tx">${richText(r.text, r)}</td></tr>`).join("")}</tbody></table>`;
 }
 
 function explain(n, top) {
@@ -108,7 +130,22 @@ function render() {
   }).join("") || `<p class="empty">No cards match.</p>`;
 }
 
-function detail(r) {
+// The dialog shows current.sections[si].rows[i]; ←/→ step through the results in page order. A card picked
+// from the champion strip is shown in place, the arrows go on from the result it was opened from.
+let at = null;
+function step(delta) {
+  const flat = current.sections.flatMap((s, si) => s.rows.map((_, i) => [si, i]));
+  const k = flat.findIndex(([si, i]) => si === at.si && i === at.i);
+  const next = flat[k + delta];
+  if (next) detail(...next);
+}
+function detail(si, i) {
+  at = { si, i };
+  const flat = current.sections.reduce((n, s, j) => n + (j < si ? s.rows.length : 0), 0) + i;
+  showCard(current.sections[si].rows[i], `${flat + 1} / ${current.count}`);
+}
+const ROLE_SHORT = ["Legend", "Champion", "Signature"];
+function showCard(r, pos) {
   const d = $("#detail");
   const show = (p) => {
     d.querySelector(".big").innerHTML = p.img ? `<img src="${esc(p.img)}" alt="">` : "";
@@ -116,18 +153,34 @@ function detail(r) {
   };
   const stats = r.type === "Legend" ? "" : [cost(r), /Unit/.test(r.type) && r.might != null ? `${ICONS.might()} ${r.might}` : ""].filter(Boolean).join(" · ");
   d.querySelector(".info").innerHTML = `
+    <nav class="step"><button type="button" data-step="-1" title="Previous (←)">‹</button><span>${pos || ""}</span><button type="button" data-step="1" title="Next (→)">›</button></nav>
     <h2>${esc(r.name)}</h2>
     <p class="line">${dots(r.domains)} ${ICONS.type(r.type)} ${esc([r.supertype, r.type].filter(Boolean).join(" "))}${stats ? ` · ${stats}` : ""}</p>
     ${r.banned ? `<p class="banned">Banned since ${esc(r.banned.slice(0, 10))}</p>` : ""}
-    <div class="tx">${richText(r.text)}</div>
+    <div class="tx">${richText(r.text, r)}</div>
     ${r.flavour ? `<p class="flav">${esc(r.flavour)}</p>` : ""}
     <p class="tags">${r.champion ? `Champion: ${qlink(`champ="${r.champion}" group:champion`, r.champion)} · ` : ""}${r.tags.filter((t) => t !== r.champion).map((t) => qlink(`tag="${t}"`, t)).join(", ")}</p>
+    ${r.type === "Legend" ? `<p class="tags">${qlink(`for:"${r.name}" group:type`, "Everything this legend's deck may play")}</p>` : ""}
+    ${sameChampion(r)}
     <h3>Printings</h3>
     <div class="prints">${r.printings.map((p) => `<button class="pr" data-id="${esc(p.id + p.kind)}">${ICONS.rarity(p.rarity)} ${esc(p.set)} ${p.num ?? ""} · ${esc(p.rarity)}${p.kind ? ` · ${esc(p.kind)}` : ""}${p.artist ? `<small>${esc(p.artist)}</small>` : ""}</button>`).join("")}</div>`;
   d.querySelectorAll(".pr").forEach((b, i) => (b.onclick = () => show(r.printings[i])));
+  d.querySelectorAll(".same button").forEach((b) => (b.onclick = () => showCard(FOLDED.find((c) => c.id === b.dataset.id), "")));
+  d.querySelectorAll("[data-step]").forEach((b) => (b.onclick = () => step(Number(b.dataset.step))));
   d.querySelectorAll("a").forEach((a) => a.addEventListener("click", () => d.close()));
   show(r.p);
-  d.showModal();
+  if (!d.open) d.showModal();
+}
+// the champion's legend, units and signatures as small pictures
+function sameChampion(r) {
+  if (!r.champion) return "";
+  const others = FOLDED.filter((c) => c.champion === r.champion && c.role <= 2 && c.id !== r.id)
+    .sort(sorter("role,energy,name", []));
+  if (!others.length) return "";
+  return `<h3>${esc(r.champion)}</h3><div class="same">${others.map((c) => {
+    const src = imgSrc(c);
+    return `<button type="button" data-id="${esc(c.id)}" title="${esc(`${c.name} · ${ROLE_SHORT[c.role]}`)}"${c.landscape ? ' class="land"' : ""}>${src ? `<img loading="lazy" src="${esc(src)}" alt="${esc(c.name)}">` : esc(c.name)}</button>`;
+  }).join("")}</div>`;
 }
 
 // ---------- filter bar ----------
@@ -282,9 +335,12 @@ $("#results").addEventListener("click", (e) => {
   const el = e.target.closest("[data-i]");
   if (!el || e.target.closest("a")) return;
   const s = el.closest("[data-s]").dataset.s;
-  detail(current.sections[s].rows[el.dataset.i]);
+  detail(Number(s), Number(el.dataset.i));
 });
 $("#detail").addEventListener("click", (e) => { if (e.target.id === "detail") e.target.close(); });
+$("#detail").addEventListener("keydown", (e) => {
+  if (e.key === "ArrowLeft" || e.key === "ArrowRight") { e.preventDefault(); step(e.key === "ArrowLeft" ? -1 : 1); }
+});
 window.addEventListener("hashchange", () => { $("#q").value = decodeURIComponent(location.hash.slice(1)); render(); });
 document.addEventListener("keydown", (e) => {
   if (e.key === "/" && document.activeElement !== $("#q")) { e.preventDefault(); $("#q").focus(); $("#q").select(); }

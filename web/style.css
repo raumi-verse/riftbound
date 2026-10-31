@@ -85,6 +85,12 @@ body[data-nofilters] #filters { display: none; }
 #filters .clear { font: inherit; height: 2.1rem; background: none; color: var(--overlay); border: 0; cursor: pointer; padding: 0 .5rem; }
 #filters .clear:hover { color: var(--red); }
 
+.kwt { position: relative; display: inline-block; outline: none; }
+.kwt .tip { display: none; position: absolute; left: 0; top: calc(100% + 4px); z-index: 10; width: max-content; max-width: 20rem;
+  padding: .4rem .6rem; background: var(--crust); color: var(--text); border: 1px solid var(--surface1); border-radius: 6px;
+  box-shadow: 0 6px 20px #0009; font-size: 13px; line-height: 1.45; font-style: normal; font-weight: normal; white-space: normal; }
+.kwt:hover .tip, .kwt:focus .tip { display: block; }
+
 dialog { border: 1px solid var(--surface1); border-radius: 10px; background: var(--mantle); color: var(--text); padding: 1rem; width: min(980px, 95vw); max-height: 92vh; }
 dialog[open] { display: flex; gap: 1.2rem; }
 dialog::backdrop { background: #000a; }
@@ -92,6 +98,14 @@ dialog .big { flex: 0 0 min(380px, 45%); }
 dialog .big img { width: 100%; border-radius: 12px; }
 dialog .info { flex: 1; overflow: auto; }
 dialog h2 { margin: 0 0 .3rem; }
+dialog .step { float: right; display: flex; align-items: center; gap: .3rem; color: var(--overlay); font-size: 12px; }
+dialog .step button { font: inherit; font-size: 18px; line-height: 1; width: 2rem; height: 2rem; background: var(--surface0); color: var(--text); border: 0; border-radius: 6px; cursor: pointer; }
+dialog .step button:hover { color: var(--accent); }
+dialog .same { display: flex; flex-wrap: wrap; gap: .35rem; margin-bottom: .6rem; }
+dialog .same button { padding: 0; border: 1px solid transparent; background: none; border-radius: 5px; overflow: hidden; cursor: pointer; width: 70px; color: var(--text); font-size: 11px; }
+dialog .same button.land { width: 98px; }
+dialog .same button:hover { border-color: var(--accent); }
+dialog .same img { display: block; width: 100%; }
 dialog .line { color: var(--subtext); margin: 0 0 .8rem; }
 dialog .tx { font-size: 15px; line-height: 1.55; }
 dialog .banned { color: var(--red); font-weight: 600; margin: -.4rem 0 .8rem; }
