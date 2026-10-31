@@ -39,6 +39,10 @@ jobs:
             git push
           fi
 
+      # the query engine on the (just synced) card data; a failure stops the deploy
+      - name: Test
+        run: node --test test/*.test.mjs
+
       # rb.raumi.dev/search/ is the browser; the root only forwards there (room for other pages later)
       - name: Lay out the site
         run: |

@@ -51,7 +51,9 @@ folding, hiding tokens/runes, domain order. Edit and reload.
 - `sync.py`: fetch, fold printings into cards, link champions, write `web/cards.js`
 - `web/icons/`: the game's symbols (domains, might, exhaust, energy, types, rarities, keyword banners) from Piltover
   Archive's CDN; `sync.py` downloads missing ones
-- `web/app.js`: query parser, filters, sorting, grouping, rendering
+- `web/query.js`: query parser, filters, sorting, grouping (no DOM)
+- `web/app.js`: rendering, filter bar, card dialog
+- `test/`: the query engine on the real cards, `node --test test/*.test.mjs` (also run before every deploy)
 - `web/index.html`, `web/style.css` (Catppuccin Mocha)
 
 ## Legal
