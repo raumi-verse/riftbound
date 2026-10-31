@@ -38,13 +38,19 @@ energy, type, rarity, plus legend (`for:`), keyword, set, sort and grouping. It 
 | `o:/when you conquer/ sort:-might view:list` | rules text regex, list view |
 | `(t:spell or t:gear) -d:fury r:epic` | or, brackets, not |
 | `t:unit\|gear e:7+ kw:tank\|shield` | `a\|b` is any of them in any field, `7+` is 7 or more |
+| `t:unit e:2..4 m>=4` | ranges: energy 2 to 4 |
+| `id:ogn-270..280` / `id=OGN-007a` | printings by id: a range (with alt arts and variants), or one exactly |
+| `r:showcase` | each card with a showcase printing, shown as that printing |
 | `show:printings is:alt` | every alternate-art printing |
 
 Click a card for its details: ←/→ step through the results, the champion's other cards are below. Hovering a
 keyword shows its reminder text.
 
 By default reprints, alternate arts, overnumbered, signature and metal prints of a card are folded into one entry
-(the details show them all). A card's champion is the champion's tag; legends and units are linked by name.
+(the details show them all). A query is judged per printing, and the entry shows the first printing that matched.
+
+**Export** (in the header) copies the results as names, as printing ids, or as a link that brings back exactly
+this list (`id=OGN-275|SFD-207 …`), or downloads them as a CSV. A card's champion is the champion's tag; legends and units are linked by name.
 
 ## Settings
 
