@@ -1,0 +1,14 @@
+{
+  "name": "Riftbound card search",
+  "short_name": "Riftbound",
+  "description": "Every Riftbound card, searchable, offline once opened.",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "background_color": "#1e1e2e",
+  "theme_color": "#181825",
+  "icons": [
+    { "src": "icons/app-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icons/app-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

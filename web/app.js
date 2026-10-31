@@ -354,3 +354,6 @@ if ((localStorage.getItem("rb-filters") || filtersDefault) === "off") document.b
 $("#synced").textContent = `${CARDS.length} cards · synced ${synced.slice(0, 10)}`;
 $("#q").value = decodeURIComponent(location.hash.slice(1));
 render();
+
+// offline use on the website (sw.js); file:// has no service workers
+if ("serviceWorker" in navigator && location.protocol.startsWith("http")) navigator.serviceWorker.register("sw.js");

@@ -10,6 +10,8 @@ xdg-open web/index.html    # the page; nothing runs in the background
 ```
 
 Hosted at https://rb.raumi.dev/search/; a GitHub Action syncs the cards every Monday (or on "Run workflow").
+Once opened there it also works offline (cards, icons and the pictures you've seen) and can be installed as an
+app on a phone.
 Card data and pictures come from the unofficial [Piltover Archive](https://piltoverarchive.com) API (Riftcodex lacked
 Radiance and the Nexus Night/Worlds printings).
 
@@ -56,6 +58,7 @@ folding, hiding tokens/runes, domain order. Edit and reload.
   Archive's CDN; `sync.py` downloads missing ones
 - `web/query.js`: query parser, filters, sorting, grouping (no DOM)
 - `web/app.js`: rendering, filter bar, card dialog
+- `web/sw.js`, `web/manifest.webmanifest`: offline use and installing as an app
 - `test/`: the query engine on the real cards, `node --test test/*.test.mjs` (also run before every deploy)
 - `web/index.html`, `web/style.css` (Catppuccin Mocha)
 
