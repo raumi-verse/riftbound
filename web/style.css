@@ -30,6 +30,7 @@ header button, #help summary { font: inherit; background: var(--surface0); color
 #chips { display: flex; flex-wrap: wrap; gap: .3rem; align-items: center; color: var(--overlay); padding: .4rem 1rem; min-height: 1.9rem; }
 .chip { font-size: 12px; padding: .1rem .5rem; border-radius: 99px; background: var(--surface0); color: var(--subtext); }
 .chip.dir { background: color-mix(in srgb, var(--accent) 25%, var(--surface0)); color: var(--text); }
+.stats { margin-left: auto; font-size: 12px; color: var(--overlay); }
 .chip.err { background: color-mix(in srgb, var(--red) 35%, var(--surface0)); color: var(--text); }
 
 main { padding: 0 1rem 2rem; }

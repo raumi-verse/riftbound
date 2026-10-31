@@ -98,11 +98,22 @@ function explain(n, top) {
   return `<span class="chip">${esc(`${n.f === "any" ? "name/text" : n.f} ${n.op} ${n.v.shown}`)}</span>`;
 }
 
+// energy 1–12 · avg 4.4 · median 4 · might 0–12 · avg 4.2 · median 4 (90 units)
+function statLine(st) {
+  const num = (x) => String(Math.round(x * 10) / 10);
+  const part = (f, s) => `${f} ${s.min === s.max ? s.min : `${s.min}–${s.max}`} · avg ${num(s.avg)} · median ${num(s.median)}`;
+  const parts = Object.entries(st).map(([f, s]) => part(f, s));
+  if (!parts.length) return "";
+  const n = st.might ? ` (${st.might.n} unit${st.might.n === 1 ? "" : "s"})` : "";
+  return `<span class="stats" title="over the cards found, each card once; energy without legends, battlefields and runes, might of units only">${esc(parts.join(" · ") + n)}</span>`;
+}
+
 function chips(res) {
   const out = [explain(res.tree, true)];
   for (const h of res.has) out.push(`<span class="chip dir">${h.neg ? "groups without" : "groups with"}: ${esc(h.shown)}</span>`);
   for (const [k, v] of Object.entries(res.dirs)) out.push(`<span class="chip dir">${k}: ${esc(v)}</span>`);
   for (const e of res.errors) out.push(`<span class="chip err">${esc(e)}</span>`);
+  out.push(statLine(stats(res.sections.flatMap((s) => s.rows))));
   return out.join("");
 }
 

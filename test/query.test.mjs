@@ -68,6 +68,10 @@ test("errors", () => {
   assert.match(run("has:legend").errors[0], /has: filters groups/);
   assert.match(run("group:nope").errors[0], /can't group by/);
   assert.match(run("sort:nope").errors[0], /unknown sort key/);
+  // a comparison without a number used to mean "> 0"
+  for (const q of ["m>(t:unit)", "t:unit m>", "m>abc", "e:"]) assert.match(run(q).errors[0], /needs a number/, q);
+  assert.equal(run("-m> t:unit").count, res("t:unit").count); // the term is dropped, with its "-"
+  same("t:unit e:2|3|8+", "t:unit (e:2 or e:3 or e>=8)");
 });
 
 test("every example query in the README runs cleanly and finds cards", () => {
@@ -111,4 +115,17 @@ test("suggestions", () => {
   assert.deepEqual([mid.from, mid.to, mid.items[0].insert], [0, 4, "t:unit"]);
   assert.equal(suggest("t:unit").items.length, 0); // already complete
   assert.equal(suggest('o:"when you').items.length, 0); // no values for rules text
+});
+
+test("stats of the results", () => {
+  const stats = Q("stats");
+  const st = stats(res("t:unit d:calm").sections[0].rows);
+  assert.equal(st.might.n, res("t:unit d:calm").count);
+  assert.ok(st.might.min <= st.might.median && st.might.median <= st.might.max);
+  // printings count once, spells don't count for might
+  assert.deepEqual(stats(res("show:printings t:unit d:calm").sections[0].rows), st);
+  const mixed = stats(res("d:calm").sections[0].rows);
+  assert.equal(mixed.might.avg, stats(res("d:calm t:unit").sections[0].rows).might.avg);
+  assert.equal(stats(res("t:legend").sections[0].rows).energy, undefined);
+  assert.deepEqual(stats([]), {});
 });

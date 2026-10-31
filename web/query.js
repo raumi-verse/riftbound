@@ -63,6 +63,7 @@ const IS = {
   banned: (r) => !!r.banned,
   landscape: (r) => r.landscape,
 };
+const NUMERIC = new Set(["energy", "might", "power", "num"]);
 const TERM = /([a-z]+)(!=|<=|>=|:|=|<|>)("[^"]*"?|\/(?:\\.|[^/])*\/?|[^\s()]*)/y;
 
 function parseValue(v) {
@@ -139,6 +140,12 @@ function tokenize(q) {
       if (DIRECTIVES.includes(f)) { dirs[f] = raw.toLowerCase(); continue; }
       try {
         const t = { k: "term", f: FIELDS[f], op, v: parseValue(raw), src: m[0] };
+        if (NUMERIC.has(t.f) && !t.v.re && !t.v.s.split("|").every((x) => /^\d+\+?$/.test(x) || (x && !Number.isNaN(Number(x))))) {
+          // m> or m>(…) would otherwise compare with Number("") = 0
+          errors.push(`${m[0]}${q[i] === "(" ? "(" : ""}? ${f}${op} needs a number, e.g. ${f}${op === ":" ? ":3" : op + "3"}`);
+          if (toks.length && toks[toks.length - 1].k === "not") toks.pop();
+          continue;
+        }
         // a|b|c: any of them
         if (!t.v.re && t.v.s.includes("|")) t.alts = t.v.s.split("|").filter(Boolean).map((s) => ({ s, shown: s }));
         if (t.f === "for") {
@@ -383,6 +390,23 @@ function run(q, view = S.view) {
     }
   }
   return { sections, count: list.length, tree, has, dirs, errors, view: dirs.view || view };
+}
+
+// ---------- stats of the results ----------
+// Energy and might only count where the card has them (the data says 0 elsewhere), each card once.
+
+const HAS_STAT = { energy: (r) => !["Legend", "Battlefield", "Rune"].includes(r.type), might: (r) => /Unit/.test(r.type) };
+function stats(list) {
+  const seen = new Set(), cards = list.filter((r) => !seen.has(r.id) && seen.add(r.id));
+  const out = {};
+  for (const [f, has] of Object.entries(HAS_STAT)) {
+    const xs = cards.filter(has).map((r) => r[f]).filter((x) => x != null).sort((a, b) => a - b);
+    if (!xs.length) continue;
+    const mid = xs.length >> 1;
+    out[f] = { n: xs.length, min: xs[0], max: xs.at(-1), avg: xs.reduce((a, b) => a + b, 0) / xs.length,
+      median: xs.length % 2 ? xs[mid] : (xs[mid - 1] + xs[mid]) / 2 };
+  }
+  return out;
 }
 
 // ---------- query terms for the filter bar ----------
