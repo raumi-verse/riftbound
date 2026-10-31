@@ -206,6 +206,46 @@ $("#filter-toggle").addEventListener("click", () => {
   localStorage.setItem("rb-filters", hidden ? "off" : "on");
 });
 
+// ---------- suggestions ----------
+// ↑/↓ pick, Tab or click accepts (Enter too once one is picked), Esc closes. A field name accepted
+// goes straight on to its values.
+
+const sug = { items: [], from: 0, to: 0, sel: -1 };
+function showSuggestions() {
+  const q = $("#q"), box = $("#suggest");
+  Object.assign(sug, suggest(q.value, q.selectionStart), { sel: -1 });
+  if (!sug.items.length || document.activeElement !== q) { box.hidden = true; return; }
+  box.innerHTML = sug.items.map((it, i) => `<li data-i="${i}">${esc(it.label)}${it.hint ? ` <small>${esc(it.hint)}</small>` : ""}</li>`).join("");
+  Object.assign(box.style, { left: `${q.offsetLeft}px`, top: `${q.offsetTop + q.offsetHeight + 4}px`, minWidth: `${Math.min(q.offsetWidth, 360)}px` });
+  box.hidden = false;
+}
+function pickSuggestion(i) {
+  sug.sel = (i + sug.items.length) % sug.items.length;
+  $("#suggest").querySelectorAll("li").forEach((li, j) => li.classList.toggle("on", j === sug.sel));
+}
+function acceptSuggestion(i) {
+  const q = $("#q"), it = sug.items[i], v = q.value;
+  const next = v.slice(0, sug.from) + it.insert + v.slice(sug.to);
+  const caret = sug.from + it.insert.length;
+  setQuery(next, false);
+  q.setSelectionRange(caret, caret);
+  showSuggestions();
+}
+$("#q").addEventListener("keydown", (e) => {
+  if ($("#suggest").hidden) return;
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); pickSuggestion(sug.sel + (e.key === "ArrowDown" ? 1 : sug.sel < 0 ? 0 : -1)); }
+  else if (e.key === "Tab" && !e.shiftKey) { e.preventDefault(); acceptSuggestion(Math.max(sug.sel, 0)); }
+  else if (e.key === "Enter" && sug.sel >= 0) { e.preventDefault(); e.stopImmediatePropagation(); acceptSuggestion(sug.sel); }
+  else if (e.key === "Escape") { e.preventDefault(); $("#suggest").hidden = true; }
+});
+$("#q").addEventListener("input", showSuggestions);
+$("#q").addEventListener("click", showSuggestions);
+$("#q").addEventListener("blur", () => { $("#suggest").hidden = true; });
+$("#suggest").addEventListener("mousedown", (e) => { // mousedown keeps the focus in the search
+  const li = e.target.closest("li");
+  if (li) { e.preventDefault(); acceptSuggestion(Number(li.dataset.i)); }
+});
+
 // ---------- wiring ----------
 
 function setQuery(q, push) {

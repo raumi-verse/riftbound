@@ -93,3 +93,22 @@ test("filter bar terms", () => {
   assert.equal(writeTerm("-t:spell", "type", "t:unit"), "-t:spell t:unit");
   assert.deepEqual(readTerm('for:"jinx, loose cannon" x', "for"), { op: ":", raw: "jinx, loose cannon" });
 });
+
+test("suggestions", () => {
+  const suggest = Q("suggest");
+  const first = (q, caret) => suggest(q, caret).items[0]?.insert;
+  assert.equal(first("dom"), "d:");
+  assert.deepEqual(suggest("t").items.map((i) => i.insert).slice(0, 2), ["t:", "tag:"]);
+  assert.equal(first("t:u"), "t:unit");
+  assert.equal(first("d:fury|ch"), "d:fury|chaos");
+  assert.equal(first("champ:lee"), 'champ:"Lee Sin"');
+  assert.equal(first("kw:sho"), 'kw:"show off"');
+  assert.equal(first("sort:energy,-mi"), "sort:energy,-might");
+  assert.equal(first("has:le"), "has:legend");
+  const sub = suggest("champ:(t:le");
+  assert.deepEqual([sub.from, sub.to, sub.items[0].insert], [7, 11, "t:legend"]);
+  const mid = suggest("t:un d:fury", 3); // caret inside the first term: it is replaced whole
+  assert.deepEqual([mid.from, mid.to, mid.items[0].insert], [0, 4, "t:unit"]);
+  assert.equal(suggest("t:unit").items.length, 0); // already complete
+  assert.equal(suggest('o:"when you').items.length, 0); // no values for rules text
+});

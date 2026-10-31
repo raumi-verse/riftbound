@@ -419,3 +419,80 @@ function writeDomains(q, mode, vals) {
 }
 const readList = (q, key) => readTerm(q, key)?.raw.split("|").filter(Boolean) || [];
 const quoteVal = (v) => /[\s|]/.test(v) ? `"${v}"` : v;
+
+// ---------- suggestions while typing ----------
+// suggest(q, caret) → { from, to, items: [{ insert, label, hint }] } for the term at the caret: field names for
+// a bare word, values after "field:". Also inside a subquery's or has:'s brackets.
+
+const FIELD_HINTS = [
+  ["t:", "type"], ["st:", "supertype"], ["d:", "domain"], ["e:", "energy"], ["m:", "might"], ["p:", "power"],
+  ["champ:", "champion"], ["for:", "playable with a legend"], ["tag:", "tag"], ["o:", "rules text"], ["kw:", "keyword"],
+  ["r:", "rarity"], ["set:", "set"], ["a:", "artist"], ["f:", "flavour text"], ["n:", "name"], ["num:", "collector number"],
+  ["is:", "card property"], ["has:", "groups with such a card"], ["sort:", "sort the cards"], ["group:", "group by"],
+  ["order:", "order the groups"], ["show:", "show:printings"], ["view:", "grid or list"],
+];
+const uniq = (xs) => [...new Set(xs.filter(Boolean))].sort((a, b) => a.localeCompare(b));
+const lazy = (fn) => { let v; return () => (v ??= fn()); };
+const VALUES = {
+  type: lazy(() => TYPE_ORDER.map((t) => [t.toLowerCase()])),
+  super: () => [["champion"], ["signature"], ["token"], ["basic"]],
+  domain: () => [...DOMAINS, "colorless"].map((d) => [d]),
+  rarity: () => RARITY_ORDER.slice(0, 5).map((r) => [r.toLowerCase()]),
+  set: () => SETS.map((s) => [s.id.toLowerCase(), s.name]),
+  tag: lazy(() => uniq(CARDS.flatMap((c) => c.tags)).map((t) => [t])),
+  champion: lazy(() => uniq(CARDS.map((c) => c.champion)).map((c) => [c])),
+  keyword: lazy(() => uniq(CARDS.flatMap(keywords)).map((k) => [k])),
+  for: lazy(() => [...uniq(LEGENDS.map((l) => l.champion)).map((c) => [c, "champion"]), ...LEGENDS.map((l) => [l.name, "legend"])]),
+  is: () => Object.keys(IS).map((k) => [k]),
+  artist: lazy(() => uniq(CARDS.flatMap((c) => c.printings.map((p) => p.artist))).map((a) => [a])),
+  name: lazy(() => uniq(CARDS.map((c) => c.name)).map((n) => [n])),
+  has: () => Object.keys(HAS_SHORT).filter((k) => !k.endsWith("s")).map((k) => [k]),
+  sort: () => ["name", "energy", "might", "power", "type", "domain", "rarity", "set", "num", "champion", "role"].map((k) => [k]),
+  order: () => ["name", "count", "energy", "might", "domain", "type", "rarity", "set"].map((k) => [k]),
+  group: () => Object.keys(GROUPS).map((k) => [k]),
+  show: () => [["printings"]],
+  view: () => [["grid"], ["list"]],
+};
+const SEPARATORS = { domain: /[,|+]/, sort: /,/, order: /,/ }; // other fields: a|b
+
+function rank(list, part, max = 10, prefixOnly = false) {
+  const p = part.toLowerCase(), pre = [], mid = [];
+  for (const it of list) {
+    const k = it.match.toLowerCase();
+    if (k.startsWith(p)) pre.push(it); else if (p && !prefixOnly && k.includes(p)) mid.push(it);
+  }
+  return pre.concat(mid).slice(0, max);
+}
+
+function suggest(q, caret = q.length) {
+  // the term starts after the last space or "(" outside quotes
+  let from = 0, inQuote = false;
+  for (let i = 0; i < caret; i++) {
+    if (q[i] === '"') inQuote = !inQuote;
+    else if (!inQuote && (q[i] === " " || q[i] === "(")) from = i + 1;
+  }
+  if (q[from] === "-") from++;
+  const to = caret + (inQuote ? 0 : q.slice(caret).match(/^[^\s()"]*/)[0].length);
+  const token = q.slice(from, to);
+  const none = { from, to, items: [] };
+  const m = token.match(/^([a-z]+)(!=|<=|>=|:|=|<|>)(.*)$/i);
+  if (m) {
+    const key = m[1].toLowerCase() === "has" ? "has" : FIELDS[m[1].toLowerCase()] || (DIRECTIVES.includes(m[1].toLowerCase()) && m[1].toLowerCase());
+    if (!key || !VALUES[key] || m[3].startsWith("/") || m[3].startsWith("(")) return none;
+    const raw = m[3].replace(/^"/, "").replace(/"$/, "");
+    const sep = SEPARATORS[key] || /\|/;
+    const cut = raw.split("").reduce((last, ch, i) => (sep.test(ch) ? i + 1 : last), 0);
+    let pre = raw.slice(0, cut), part = raw.slice(cut), neg = "";
+    if ((key === "sort" || key === "order") && part.startsWith("-")) { neg = "-"; part = part.slice(1); }
+    const items = rank(VALUES[key]().map(([v, hint]) => ({ match: v, hint })), part).map(({ match: v, hint }) => {
+      const val = pre + neg + v;
+      return { insert: `${m[1]}${m[2]}${/[\s,]/.test(val) && !SEPARATORS[key] ? `"${val}"` : val}`, label: v, hint };
+    }).filter((it) => it.insert.toLowerCase() !== token.toLowerCase());
+    return { from, to, items };
+  }
+  if (!/^[a-z]+$/i.test(token)) return none;
+  const items = rank(FIELD_HINTS.flatMap(([f, hint]) => [{ match: f, hint }, { match: hint, f, hint }]), token, 20, true)
+    .map((it) => ({ insert: it.f || it.match, label: it.f || it.match, hint: it.hint }));
+  const seen = new Set();
+  return { from, to, items: items.filter((it) => !seen.has(it.insert) && seen.add(it.insert)).slice(0, 8) };
+}

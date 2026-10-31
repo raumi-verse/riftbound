@@ -8,7 +8,8 @@
 </head>
 <body data-view="grid">
 <header>
-  <input id="q" type="search" placeholder='Search…  e.g. group:champion   d:fury e<=3 kw:accelerate   o:"when you conquer" sort:-might' autofocus spellcheck="false">
+  <input id="q" type="search" placeholder='Search…  e.g. group:champion   d:fury e<=3 kw:accelerate   o:"when you conquer" sort:-might' autofocus spellcheck="false" autocomplete="off">
+  <ul id="suggest" role="listbox" hidden></ul>
   <span id="count"></span>
   <button id="filter-toggle" title="Show / hide the filters">Filters</button>
   <button id="view" title="Grid / list">☰</button>
@@ -35,7 +36,7 @@
         <tr><td><code>show:printings</code></td><td>every printing as its own entry</td></tr>
         <tr><td><code>view:list</code></td><td>or <code>view:grid</code></td></tr>
       </table>
-      <p>The filter bar under the search writes these terms into the query, so you can click a start and type the rest.
+      <p>While typing, suggestions for fields and values: ↑/↓, Tab to take one. The filter bar under the search writes these terms into the query, so you can click a start and type the rest.
         <code>/</code> focuses the search. In the list, click a column to sort by it, shift-click to add it as the next key.
         Defaults are in <code>web/settings.js</code>.</p>
     </div>
