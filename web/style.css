@@ -42,7 +42,12 @@ section > h2 small { color: var(--overlay); font-weight: normal; font-size: 13px
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--w), 1fr)); gap: .6rem; align-items: start; }
 .card { position: relative; padding: 0; border: 0; background: none; cursor: pointer; border-radius: 4.5% / 3.3%; overflow: hidden; }
 .card img { display: block; width: 100%; aspect-ratio: 744 / 1039; object-fit: contain; }
-.card.land img { aspect-ratio: 1039 / 744; }
+/* battlefields: the picture is the card on its side, turned upright in a landscape box (the img's height = the box's width) */
+.card.land { grid-column: span 2; border-radius: 3.3% / 4.5%; }
+.card.land, dialog .same button.land, .rot { aspect-ratio: 1039 / 744; position: relative; overflow: hidden; }
+.card.land img, dialog .same button.land img, dialog .big .rot img { position: absolute; left: 50%; top: 50%; width: 71.6%; max-width: none; max-height: none; margin: 0; aspect-ratio: 744 / 1039; transform: translate(-50%, -50%) rotate(90deg); }
+.card.land .noimg { position: absolute; inset: 0; aspect-ratio: auto; }
+.rot { display: block; border-radius: 12px; }
 .card:hover { outline: 2px solid var(--accent); }
 .noimg { display: flex; align-items: center; justify-content: center; aspect-ratio: 744 / 1039; background: var(--surface0); color: var(--text); padding: 1rem; }
 .nprint { position: absolute; right: 6px; bottom: 6px; font-size: 11px; background: #000b; color: #fff; padding: 0 .4em; border-radius: 99px; }
@@ -97,6 +102,7 @@ dialog[open] { display: flex; gap: 1.2rem; }
 dialog::backdrop { background: #000a; }
 dialog .big { flex: 0 0 min(380px, 45%); }
 dialog .big img { width: 100%; border-radius: 12px; }
+dialog .big.land { flex-basis: min(520px, 55%); }
 dialog .info { flex: 1; overflow: auto; }
 dialog h2 { margin: 0 0 .3rem; }
 dialog .step { float: right; display: flex; align-items: center; gap: .3rem; color: var(--overlay); font-size: 12px; }

@@ -86,7 +86,7 @@ function listSection(rows) {
     <td>${esc(r.champion || "")}</td>
     <td>${ICONS.type(r.type)} ${esc(r.type)}${r.supertype ? ` <small>${esc(r.supertype)}</small>` : ""}</td>
     <td>${dots(r.domains)}</td>
-    <td class="n">${r.energy != null && r.type !== "Legend" ? ICONS.energy(r.energy) : ""}</td><td class="n">${/Unit/.test(r.type) ? r.might ?? "" : ""}</td><td class="n">${powerIcons(r)}</td>
+    <td class="n">${r.energy != null && HAS_STAT.energy(r) ? ICONS.energy(r.energy) : ""}</td><td class="n">${/Unit/.test(r.type) ? r.might ?? "" : ""}</td><td class="n">${powerIcons(r)}</td>
     <td>${ICONS.rarity(r.p.rarity)} ${esc(r.p.rarity)}</td><td>${esc(r.p.set)}&nbsp;${r.p.num ?? ""}</td>
     <td class="tx">${richText(r.text, r)}</td></tr>`).join("")}</tbody></table>`;
 }
@@ -159,10 +159,11 @@ const ROLE_SHORT = ["Legend", "Champion", "Signature"];
 function showCard(r, pos) {
   const d = $("#detail");
   const show = (p) => {
-    d.querySelector(".big").innerHTML = p.img ? `<img src="${esc(p.img)}" alt="">` : "";
+    const img = p.img ? `<img src="${esc(p.img)}" alt="">` : "";
+    d.querySelector(".big").innerHTML = img && r.landscape ? `<span class="rot">${img}</span>` : img;
     d.querySelectorAll(".pr").forEach((b) => b.classList.toggle("on", b.dataset.id === p.id + p.kind));
   };
-  const stats = r.type === "Legend" ? "" : [cost(r), /Unit/.test(r.type) && r.might != null ? `${ICONS.might()} ${r.might}` : ""].filter(Boolean).join(" · ");
+  const stats = !HAS_STAT.energy(r) ? "" : [cost(r), /Unit/.test(r.type) && r.might != null ? `${ICONS.might()} ${r.might}` : ""].filter(Boolean).join(" · ");
   d.querySelector(".info").innerHTML = `
     <nav class="step"><button type="button" data-step="-1" title="Previous (←)">‹</button><span>${pos || ""}</span><button type="button" data-step="1" title="Next (→)">›</button><button type="button" class="close" title="Close (Esc)">✕</button></nav>
     <h2>${esc(r.name)}</h2>
@@ -180,6 +181,7 @@ function showCard(r, pos) {
   d.querySelectorAll("[data-step]").forEach((b) => (b.onclick = () => step(Number(b.dataset.step))));
   d.querySelector(".close").onclick = () => d.close();
   d.querySelectorAll("a").forEach((a) => a.addEventListener("click", () => d.close()));
+  d.querySelector(".big").classList.toggle("land", !!r.landscape);
   show(r.p);
   if (!d.open) d.showModal();
 }
