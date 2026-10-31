@@ -88,7 +88,8 @@ function listSection(rows) {
     <td>${dots(r.domains)}</td>
     <td class="n">${r.energy != null && HAS_STAT.energy(r) ? ICONS.energy(r.energy) : ""}</td><td class="n">${/Unit/.test(r.type) ? r.might ?? "" : ""}</td><td class="n">${powerIcons(r)}</td>
     <td>${ICONS.rarity(r.p.rarity)} ${esc(r.p.rarity)}</td><td>${esc(r.p.set)}&nbsp;${r.p.num ?? ""}</td>
-    <td class="tx">${richText(r.text, r)}</td></tr>`).join("")}</tbody></table>`;
+    <td class="tx">${richText(r.text, r)}</td>
+    <td class="meta">${[`${ICONS.type(r.type)} ${esc(r.type)}${r.supertype ? ` ${esc(r.supertype)}` : ""}`, esc(r.champion || ""), `${ICONS.rarity(r.p.rarity)} ${esc(r.p.rarity)}`, `${esc(r.p.set)}&nbsp;${r.p.num ?? ""}`].filter(Boolean).join(" · ")}</td></tr>`).join("")}</tbody></table>`;
 }
 
 function explain(n, top) {

@@ -58,9 +58,10 @@ section > h2 small { color: var(--overlay); font-weight: normal; font-size: 13px
 
 .list { width: 100%; border-collapse: collapse; table-layout: fixed; }
 /* fixed widths so the tables of one page line up */
-.list th:nth-child(1) { width: 17rem; } .list th:nth-child(2) { width: 8rem; } .list th:nth-child(3) { width: 9rem; }
-.list th:nth-child(4) { width: 5rem; } .list th:nth-child(n+5):nth-child(-n+7) { width: 2.6rem; text-align: right; }
-.list th:nth-child(7) { width: 4.6rem; } .list th:nth-child(8) { width: 7.5rem; } .list th:nth-child(9) { width: 5.5rem; }
+.list th:nth-child(1) { width: 14rem; } .list th:nth-child(2) { width: 7rem; } .list th:nth-child(3) { width: 8.5rem; }
+.list th:nth-child(4) { width: 4rem; } .list th:nth-child(n+5):nth-child(-n+7) { width: 2.4rem; text-align: right; }
+.list th:nth-child(7) { width: 4.2rem; } .list th:nth-child(8) { width: 6.5rem; } .list th:nth-child(9) { width: 5rem; }
+.list td.meta { display: none; }
 .list th { text-align: left; font-weight: 600; color: var(--subtext); padding: .3rem .5rem; border-bottom: 1px solid var(--surface1); cursor: pointer; user-select: none; white-space: nowrap; }
 .list th:not([data-sort]) { cursor: default; }
 .list th[data-sort]:hover { color: var(--accent); }
@@ -130,6 +131,21 @@ footer { color: var(--overlay); font-size: 12px; padding: 1rem; text-align: cent
 footer p { margin: .3rem auto; max-width: 60rem; }
 footer .legal { font-size: 11px; }
 
+/* narrower than the table: one block per card. name, domains, energy, might, power (fixed widths, so they line up
+   from card to card) · type, champion, rarity, set · text */
+@media (max-width: 1200px) {
+  .list, .list tbody { display: block; }
+  .list thead { display: none; }
+  .list tr { display: grid; grid-template-columns: 1fr 2.8rem 1.8rem 1.8rem minmax(2.8rem, auto); align-items: baseline; border-bottom: 1px solid var(--surface0); padding: .35rem 0; }
+  .list td { border: 0; padding: .05rem .25rem; }
+  .list td:nth-child(-n+3), .list td:nth-child(8), .list td:nth-child(9) { display: none; }
+  .list td:nth-child(1) { display: block; grid-area: 1 / 1; }
+  .list td:nth-child(4) { grid-area: 1 / 2; text-align: right; } .list td:nth-child(5) { grid-area: 1 / 3; }
+  .list td:nth-child(6) { grid-area: 1 / 4; } .list td:nth-child(7) { grid-area: 1 / 5; }
+  .list td.meta { display: block; grid-area: 2 / 1 / 3 / -1; color: var(--subtext); font-size: 12px; }
+  .list td.tx { grid-area: 3 / 1 / 4 / -1; max-width: 60rem; }
+}
+
 /* phones */
 @media (max-width: 700px) {
   header { flex-wrap: wrap; padding: .5rem; }
@@ -144,16 +160,6 @@ footer .legal { font-size: 11px; }
   main { padding: 0 .5rem 2rem; }
   .grid { grid-template-columns: repeat(auto-fill, minmax(min(var(--w), 44vw), 1fr)); gap: .4rem; }
 
-  /* the list becomes one block per card: name, domains, cost, might · type · text */
-  .list, .list tbody { display: block; }
-  .list thead { display: none; }
-  .list tr { display: grid; grid-template-columns: 1fr auto auto auto auto; align-items: baseline; border-bottom: 1px solid var(--surface0); padding: .35rem 0; }
-  .list td { border: 0; padding: .05rem .25rem; }
-  .list td:nth-child(2), .list td:nth-child(8), .list td:nth-child(9) { display: none; }
-  .list td:nth-child(1) { grid-area: 1 / 1; } .list td:nth-child(4) { grid-area: 1 / 2; } .list td:nth-child(5) { grid-area: 1 / 3; }
-  .list td:nth-child(6) { grid-area: 1 / 4; } .list td:nth-child(7) { grid-area: 1 / 5; }
-  .list td:nth-child(3) { grid-area: 2 / 1 / 3 / -1; color: var(--subtext); font-size: 12px; }
-  .list td.tx { grid-area: 3 / 1 / 4 / -1; }
 
   dialog { width: 100vw; max-width: 100vw; max-height: 100dvh; margin: auto 0 0; padding: .6rem; border-radius: 10px 10px 0 0; overflow-y: auto; }
   dialog[open] { flex-direction: column; gap: .6rem; }
