@@ -10,6 +10,7 @@
 <header>
   <input id="q" type="search" placeholder='Search…  e.g. group:champion   d:fury e<=3 kw:accelerate   o:"when you conquer" sort:-might' autofocus spellcheck="false">
   <span id="count"></span>
+  <button id="filter-toggle" title="Show / hide the filters">Filters</button>
   <button id="view" title="Grid / list">☰</button>
   <details id="help">
     <summary title="Search syntax">?</summary>
@@ -20,7 +21,8 @@
         <tr><td><code>t:</code> type</td><td>legend, unit, spell, gear, battlefield, rune</td></tr>
         <tr><td><code>st:</code> supertype</td><td>champion, signature, token, basic</td></tr>
         <tr><td><code>d:</code> domain</td><td><code>d:fury</code> has Fury · <code>d:fury,chaos</code> has both · <code>d=fury,chaos</code> exactly · <code>d&lt;=fury,chaos</code> playable in Fury/Chaos · <code>d:colorless</code></td></tr>
-        <tr><td><code>e m p</code></td><td>energy, might, power: <code>e&lt;=3</code> <code>m&gt;=4</code> <code>p=1</code></td></tr>
+        <tr><td><code>e m p</code></td><td>energy, might, power: <code>e&lt;=3</code> <code>m&gt;=4</code> <code>p=1</code> <code>e:7+</code> (7 or more)</td></tr>
+        <tr><td><code>a|b</code></td><td>any of them, in any field: <code>t:unit|gear</code> <code>d:fury|chaos</code> <code>e:1|2|3</code> <code>kw:tank|shield</code> <code>for:jinx|viktor</code></td></tr>
         <tr><td><code>champ:</code></td><td>champion (legend, champion units, signatures, cards with the tag) · <code>champ="lee sin"</code> exact</td></tr>
         <tr><td><code>tag:</code> <code>o:</code> <code>kw:</code></td><td>tag · rules text · keyword (<code>kw:accelerate</code>, <code>kw:level</code>)</td></tr>
         <tr><td><code>r: set: a: f: num:</code></td><td>rarity · set (OGN, SFD, UNL, VEN, OPP…) · artist · flavour · collector number</td></tr>
@@ -33,11 +35,13 @@
         <tr><td><code>show:printings</code></td><td>every printing as its own entry</td></tr>
         <tr><td><code>view:list</code></td><td>or <code>view:grid</code></td></tr>
       </table>
-      <p><code>/</code> focuses the search. In the list, click a column to sort by it, shift-click to add it as the next key.
+      <p>The filter bar under the search writes these terms into the query, so you can click a start and type the rest.
+        <code>/</code> focuses the search. In the list, click a column to sort by it, shift-click to add it as the next key.
         Defaults are in <code>web/settings.js</code>.</p>
     </div>
   </details>
 </header>
+<div id="filters"></div>
 <div id="chips"></div>
 <main id="results"></main>
 <footer>

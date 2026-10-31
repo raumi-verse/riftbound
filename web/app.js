@@ -1,6 +1,6 @@
 "use strict";
 const S = window.SETTINGS;
-const { cards: CARDS, sets: SETS, synced } = window.DATA;
+const { cards: CARDS, sets: SETS, synced, keywords: KW_ICONS = {} } = window.DATA;
 
 const TYPE_ORDER = ["Legend", "Unit", "Spell", "Gear", "Battlefield", "Rune"];
 const RARITY_ORDER = ["Common", "Uncommon", "Rare", "Epic", "Showcase", "Promo"];
@@ -110,8 +110,10 @@ function tokenize(q) {
       if (DIRECTIVES.includes(f)) { dirs[f] = raw.toLowerCase(); continue; }
       try {
         const t = { k: "term", f: FIELDS[f], op, v: parseValue(raw), src: m[0] };
+        // a|b|c: any of them
+        if (!t.v.re && t.v.s.includes("|")) t.alts = t.v.s.split("|").filter(Boolean).map((s) => ({ s, shown: s }));
         if (t.f === "for") {
-          t.legends = legendsFor(t.v);
+          t.legends = [...new Set((t.alts || [t.v]).flatMap(legendsFor))];
           if (!t.legends.length) errors.push(`no legend matches "${t.v.shown}"`);
           else t.v.shown = t.legends.map((l) => l.name).join(" / ");
         }
@@ -164,7 +166,7 @@ function parse(toks) {
 }
 
 function keywords(r) {
-  return r._kw || (r._kw = [...new Set([...r.alltext.matchAll(/\[([A-Za-z][A-Za-z ]*?)(?: \d+)?\]/g)].map((m) => m[1].toLowerCase()))]);
+  return r._kw || (r._kw = [...new Set([...r.alltext.matchAll(/\[([A-Za-z][A-Za-z -]*?)(?: \d+)?\]/g)].map((m) => m[1].toLowerCase()))]);
 }
 
 function fieldValues(r, f) {
@@ -196,6 +198,7 @@ function strMatch(vals, op, v, f) {
 }
 
 function numMatch(x, op, v) {
+  if (x != null && (op === ":" || op === "=") && /^\d+\+$/.test(v.s)) return x >= parseInt(v.s); // e:7+
   const n = Number(v.s);
   if (x == null || Number.isNaN(n)) return false;
   switch (op) {
@@ -229,10 +232,15 @@ function test(node, r) {
   if (node.and) return node.and.every((n) => test(n, r));
   if (node.not) return !test(node.not, r);
   const { f, op, v } = node;
+  if (f === "for") return node.legends.some((l) => playable(r, l));
+  if (node.alts) {
+    const neg = op === "!=";
+    const any = node.alts.some((a) => test({ ...node, op: neg ? "=" : op, v: a, alts: null }, r));
+    return neg ? !any : any;
+  }
   if (f === "energy" || f === "might" || f === "power") return numMatch(r[f], op, v);
   if (f === "num") return r.prints.some((p) => numMatch(p.num, op, v));
   if (f === "domain") return domainMatch(r, op, v);
-  if (f === "for") return node.legends.some((l) => playable(r, l));
   if (f === "is") { const fn = IS[v.s]; return fn ? (op === "!=" ? !fn(r) : fn(r)) : false; }
   if (["<", "<=", ">", ">="].includes(op)) return false;
   return strMatch(fieldValues(r, f), op, v, f);
@@ -353,19 +361,41 @@ const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 let view = localStorage.getItem("rb-view") || S.view;
 
+// the game's symbols, in web/icons/ (sync.py downloads them)
+const icon = (file, alt, cls = "") => `<img class="ic${cls ? " " + cls : ""}" src="icons/${file}" alt="${esc(alt)}" title="${esc(alt)}">`;
+const cap = (s) => s[0].toUpperCase() + s.slice(1);
+const ICONS = {
+  domain: (d) => icon(`${d.toLowerCase()}.webp`, cap(d.toLowerCase())),
+  energy: (n) => icon(`${n}.svg`, `${n} energy`, "en"),
+  might: () => icon("might.webp", "Might"),
+  exhaust: () => icon("tap.webp", "Exhaust"),
+  rune: () => icon("rune.webp", "Any rune"),
+  type: (t) => ["legend", "unit", "spell", "gear", "battlefield", "rune"].includes(t.split(" ")[0].toLowerCase()) ? icon(`type-${t.split(" ")[0].toLowerCase()}.webp`, t, "ty") : "",
+  rarity: (r) => ["common", "uncommon", "rare", "epic", "showcase"].includes(r.toLowerCase()) ? icon(`rarity-${r.toLowerCase()}.webp`, r, "ra") : "",
+};
+// [Assault 2]: its own banner, else the [Assault] banner and the number, else bold text
+function keywordBadge(k) {
+  const low = k.toLowerCase(), [, base, n] = low.match(/^(.*?)(?: (\d+))?$/);
+  if (KW_ICONS[low]) return `<img class="kwb" src="${KW_ICONS[low]}" alt="[${esc(k)}]" title="${esc(k)}">`;
+  if (KW_ICONS[base]) return `<img class="kwb" src="${KW_ICONS[base]}" alt="[${esc(k)}]" title="${esc(k)}"><b class="kwn">${n}</b>`;
+  return `<b class="kw">${esc(k)}</b>`;
+}
 function richText(t) {
   return esc(t)
-    .replace(/:rb_energy_(\d+):/g, '<span class="ic energy">$1</span>')
-    .replace(/:rb_might:/g, '<span class="ic might" title="Might">⚔</span>')
-    .replace(/:rb_exhaust:/g, '<span class="ic exhaust" title="Exhaust">⟳</span>')
-    .replace(/:rb_rune_rainbow:/g, '<span class="ic rune any" title="Any rune"></span>')
-    .replace(/:rb_rune_(\w+):/g, (_, d) => `<span class="ic rune" style="--c:var(--${d})" title="${d}"></span>`)
+    .replace(/:rb_energy_(\d+):/g, (_, n) => ICONS.energy(n))
+    .replace(/:rb_might:/g, ICONS.might)
+    .replace(/:rb_exhaust:/g, ICONS.exhaust)
+    .replace(/:rb_rune_rainbow:/g, ICONS.rune)
+    .replace(/:rb_rune_(\w+):/g, (_, d) => ICONS.domain(d))
     .replace(/\[(&gt;)+\]/g, "▶")
-    .replace(/\[([A-Za-z][A-Za-z ]*?(?: \d+)?)\]/g, '<b class="kw">$1</b>')
+    .replace(/\[([A-Za-z][A-Za-z -]*?(?: \d+)?)\]/g, (_, k) => keywordBadge(k))
     .replace(/\n/g, "<br>");
 }
 
-const dots = (ds) => ds.map((d) => `<span class="dot" style="--c:var(--${d.toLowerCase()})" title="${d}"></span>`).join("");
+const dots = (ds) => ds.map(ICONS.domain).join("");
+// power is paid in runes of the card's domain; with two domains the split isn't in the data
+const powerIcons = (r) => !r.power ? "" : r.domains.length === 1 ? ICONS.domain(r.domains[0]).repeat(r.power) : `${r.power}${ICONS.rune()}`;
+const cost = (r) => [r.energy != null ? ICONS.energy(r.energy) : "", powerIcons(r)].join("");
 const qlink = (q, text) => `<a href="#${encodeURIComponent(q)}">${esc(text)}</a>`;
 const quote = (s) => /\s/.test(s) ? `"${s}"` : s;
 
@@ -380,16 +410,16 @@ function gridSection(rows) {
 
 const COLS = [
   ["name", "Name"], ["champion", "Champion"], ["type", "Type"], ["domain", "Domains"],
-  ["energy", "E"], ["might", "M"], ["power", "P"], ["rarity", "Rarity"], ["set", "Set"], [null, "Text"],
+  ["energy", "E"], ["might", ICONS.might()], ["power", ICONS.rune()], ["rarity", "Rarity"], ["set", "Set"], [null, "Text"],
 ];
 function listSection(rows) {
   return `<table class="list"><thead><tr>${COLS.map(([k, l]) => `<th${k ? ` data-sort="${k}" title="click: sort by this, shift-click: add as next key"` : ""}>${l}</th>`).join("")}</tr></thead><tbody>${rows.map((r, i) => `<tr data-i="${i}">
     <td class="nm">${esc(r.name)}${r.role != null ? ` <small class="role">${["L", "C", "S", ""][r.role]}</small>` : ""}</td>
     <td>${esc(r.champion || "")}</td>
-    <td>${esc(r.type)}${r.supertype ? ` <small>${esc(r.supertype)}</small>` : ""}</td>
+    <td>${ICONS.type(r.type)} ${esc(r.type)}${r.supertype ? ` <small>${esc(r.supertype)}</small>` : ""}</td>
     <td>${dots(r.domains)}</td>
-    <td class="n">${r.energy ?? ""}</td><td class="n">${r.might ?? ""}</td><td class="n">${r.power ?? ""}</td>
-    <td>${esc(r.p.rarity)}</td><td>${esc(r.p.set)}&nbsp;${r.p.num ?? ""}</td>
+    <td class="n">${r.energy != null && r.type !== "Legend" ? ICONS.energy(r.energy) : ""}</td><td class="n">${/Unit/.test(r.type) ? r.might ?? "" : ""}</td><td class="n">${powerIcons(r)}</td>
+    <td>${ICONS.rarity(r.p.rarity)} ${esc(r.p.rarity)}</td><td>${esc(r.p.set)}&nbsp;${r.p.num ?? ""}</td>
     <td class="tx">${richText(r.text)}</td></tr>`).join("")}</tbody></table>`;
 }
 
@@ -411,6 +441,7 @@ function chips(res) {
 let current = null;
 function render() {
   const q = $("#q").value;
+  syncFilters(q);
   const res = (current = run(q));
   $("#chips").innerHTML = chips(res);
   $("#count").textContent = `${res.count} ${res.dirs.show?.startsWith("print") ? "printings" : "cards"}`;
@@ -437,21 +468,128 @@ function detail(r) {
     d.querySelector(".big").innerHTML = p.img ? `<img src="${esc(p.img)}" alt="">` : "";
     d.querySelectorAll(".pr").forEach((b) => b.classList.toggle("on", b.dataset.id === p.id + p.kind));
   };
-  const stats = [["Energy", r.energy], ["Might", r.might], ["Power", r.power]].filter(([, v]) => v != null).map(([k, v]) => `${k} ${v}`).join(" · ");
+  const stats = r.type === "Legend" ? "" : [cost(r), /Unit/.test(r.type) && r.might != null ? `${ICONS.might()} ${r.might}` : ""].filter(Boolean).join(" · ");
   d.querySelector(".info").innerHTML = `
     <h2>${esc(r.name)}</h2>
-    <p class="line">${dots(r.domains)} ${esc([r.supertype, r.type].filter(Boolean).join(" "))}${stats ? ` · ${stats}` : ""}</p>
+    <p class="line">${dots(r.domains)} ${ICONS.type(r.type)} ${esc([r.supertype, r.type].filter(Boolean).join(" "))}${stats ? ` · ${stats}` : ""}</p>
     ${r.banned ? `<p class="banned">Banned since ${esc(r.banned.slice(0, 10))}</p>` : ""}
     <div class="tx">${richText(r.text)}</div>
     ${r.flavour ? `<p class="flav">${esc(r.flavour)}</p>` : ""}
     <p class="tags">${r.champion ? `Champion: ${qlink(`champ="${r.champion}" group:champion`, r.champion)} · ` : ""}${r.tags.filter((t) => t !== r.champion).map((t) => qlink(`tag="${t}"`, t)).join(", ")}</p>
     <h3>Printings</h3>
-    <div class="prints">${r.printings.map((p) => `<button class="pr" data-id="${esc(p.id + p.kind)}">${esc(p.set)} ${p.num ?? ""} · ${esc(p.rarity)}${p.kind ? ` · ${esc(p.kind)}` : ""}${p.artist ? `<small>${esc(p.artist)}</small>` : ""}</button>`).join("")}</div>`;
+    <div class="prints">${r.printings.map((p) => `<button class="pr" data-id="${esc(p.id + p.kind)}">${ICONS.rarity(p.rarity)} ${esc(p.set)} ${p.num ?? ""} · ${esc(p.rarity)}${p.kind ? ` · ${esc(p.kind)}` : ""}${p.artist ? `<small>${esc(p.artist)}</small>` : ""}</button>`).join("")}</div>`;
   d.querySelectorAll(".pr").forEach((b, i) => (b.onclick = () => show(r.printings[i])));
   d.querySelectorAll("a").forEach((a) => a.addEventListener("click", () => d.close()));
   show(r.p);
   d.showModal();
 }
+
+// ---------- filter bar ----------
+// The buttons only write terms into the query (the query stays the one truth) and show what's in it.
+// Each control owns the first top-level term of its field, e.g. d:fury|chaos or e:2|3|8+.
+
+const TERM_FIELDS = {
+  domain: ["d|domain", "<=|=|:"], energy: ["e|energy|cost", "=|:"], type: ["t|type", "=|:"],
+  rarity: ["r|rarity", "=|:"], set: ["s|set", "=|:"], keyword: ["kw|keyword", "=|:"], for: ["for|legend", "=|:"],
+  sort: ["sort", ":"], group: ["group", ":"],
+};
+const termRe = (key) => new RegExp(`(^|\\s)(${TERM_FIELDS[key][0]})(${TERM_FIELDS[key][1]})("[^"]*"|[^\\s()"]+)(?=\\s|$)`, "gi");
+function readTerm(q, key) {
+  const m = termRe(key).exec(q);
+  return m ? { op: m[3], raw: m[4].replace(/^"|"$/g, "").toLowerCase() } : null;
+}
+function writeTerm(q, key, term) {
+  q = q.replace(termRe(key), "$1").replace(/\s{2,}/g, " ").trim();
+  return term ? `${q} ${term}`.trim() : q;
+}
+
+const DOMAINS = S.domainOrder.map((d) => d.toLowerCase());
+const ENERGIES = ["0", "1", "2", "3", "4", "5", "6", "7+"];
+const TYPES = ["legend", "unit", "spell", "gear", "battlefield", "rune"];
+const RARITIES = ["common", "uncommon", "rare", "epic", "showcase"];
+let domainMode = "any"; // any: d:fury|chaos · all: d:fury,chaos · within: d<=fury,chaos
+
+function readDomains(q) {
+  const t = readTerm(q, "domain");
+  if (!t) return { mode: domainMode, vals: [] };
+  const mode = t.op === "<=" ? "within" : t.raw.includes(",") ? "all" : t.raw.includes("|") ? "any" : domainMode;
+  return { mode, vals: t.raw.split(/[,|+]/).filter(Boolean).map((w) => w === "none" ? "colorless" : DOMAINS.find((d) => d.startsWith(w)) || w) };
+}
+function writeDomains(q, mode, vals) {
+  if (!vals.length) return writeTerm(q, "domain", "");
+  return writeTerm(q, "domain", mode === "within" ? `d<=${vals.join(",")}` : `d:${vals.join(mode === "all" ? "," : "|")}`);
+}
+const readList = (q, key) => readTerm(q, key)?.raw.split("|").filter(Boolean) || [];
+const quoteVal = (v) => /[\s|]/.test(v) ? `"${v}"` : v;
+
+const allKeywords = [...new Set(CARDS.flatMap(keywords))].sort();
+const legendOptions = [...LEGENDS].sort((a, b) => cmp(a.champion + a.name, b.champion + b.name));
+const SORTS = [["", "default sort"], ["energy", "energy ↑"], ["-energy", "energy ↓"], ["might", "might ↑"], ["-might", "might ↓"],
+  ["name", "name"], ["domain,energy", "domain"], ["rarity", "rarity"], ["set", "set & number"]];
+const GROUPINGS = [["", "no groups"], ["champion", "by champion"], ["type", "by type"], ["domain", "by domain"], ["set", "by set"], ["rarity", "by rarity"]];
+
+const toggle = (f, v, html, title) => `<button type="button" class="tg" data-f="${f}" data-v="${esc(v)}" title="${esc(title)}">${html}</button>`;
+function buildFilters() {
+  const opts = (list, label) => list.map(([v, l]) => `<option value="${esc(v)}">${esc(l)}</option>`).join("");
+  $("#filters").innerHTML = `
+    <div class="fg">${DOMAINS.map((d) => toggle("domain", d, ICONS.domain(d), cap(d))).join("")}${toggle("domain", "colorless", icon("colorless.svg", "Colorless"), "Colorless")}
+      <select data-f="dmode" title="any: has one of them · all: has all of them · within: playable in a deck of these domains">
+        <option value="any">any of</option><option value="all">all of</option><option value="within">within</option></select></div>
+    <div class="fg">${ENERGIES.map((e) => toggle("energy", e, `<span class="en-b">${ICONS.energy(e.replace("+", ""))}${e.endsWith("+") ? "+" : ""}</span>`, `Energy ${e}`)).join("")}</div>
+    <div class="fg">${TYPES.map((t) => toggle("type", t, ICONS.type(t), cap(t))).join("")}</div>
+    <div class="fg">${RARITIES.map((r) => toggle("rarity", r, ICONS.rarity(r), cap(r))).join("")}</div>
+    <div class="fg">
+      <select data-f="for" title="Only cards a deck with this legend may play">${opts([["", "any legend"], ...legendOptions.map((l) => [l.name.toLowerCase(), l.name])])}</select>
+      <select data-f="keyword">${opts([["", "any keyword"], ...allKeywords.map((k) => [k, cap(k)])])}</select>
+      <select data-f="set">${opts([["", "any set"], ...SETS.map((x) => [x.id.toLowerCase(), `${x.id} · ${x.name}`])])}</select>
+      <select data-f="sort">${opts(SORTS)}</select>
+      <select data-f="group">${opts(GROUPINGS)}</select>
+      <button type="button" class="clear" title="Clear the search">✕</button>
+    </div>`;
+}
+
+function syncFilters(q) {
+  const dom = readDomains(q);
+  $("#filters [data-f=dmode]").value = dom.mode;
+  const on = { domain: dom.vals, energy: readList(q, "energy"), type: readList(q, "type"), rarity: readList(q, "rarity") };
+  $("#filters").querySelectorAll(".tg").forEach((b) => b.classList.toggle("on", on[b.dataset.f].includes(b.dataset.v)));
+  for (const f of ["for", "keyword", "set", "sort", "group"]) {
+    const sel = $(`#filters select[data-f=${f}]`), v = readTerm(q, f)?.raw ?? "";
+    if (v && ![...sel.options].some((o) => o.value === v)) sel.add(new Option(v, v)); // typed by hand
+    sel.value = v;
+  }
+}
+
+$("#filters").addEventListener("click", (e) => {
+  const q = $("#q").value;
+  if (e.target.closest(".clear")) return setQuery("", true);
+  const b = e.target.closest(".tg");
+  if (!b) return;
+  const { f, v } = b.dataset;
+  if (f === "domain") {
+    const { mode, vals } = readDomains(q);
+    domainMode = mode;
+    return setQuery(writeDomains(q, mode, vals.includes(v) ? vals.filter((x) => x !== v) : [...vals, v]), true);
+  }
+  const vals = readList(q, f);
+  const next = vals.includes(v) ? vals.filter((x) => x !== v) : [...vals, v];
+  setQuery(writeTerm(q, f, next.length ? `${{ energy: "e", type: "t", rarity: "r" }[f]}:${next.join("|")}` : ""), true);
+});
+$("#filters").addEventListener("change", (e) => {
+  const sel = e.target.closest("select");
+  if (!sel) return;
+  const q = $("#q").value, f = sel.dataset.f, v = sel.value;
+  if (f === "dmode") {
+    domainMode = v;
+    return setQuery(writeDomains(q, v, readDomains(q).vals), true);
+  }
+  const name = { for: "for", keyword: "kw", set: "set", sort: "sort", group: "group" }[f];
+  setQuery(writeTerm(q, f, v ? `${name}:${quoteVal(v)}` : ""), true);
+});
+$("#filter-toggle").addEventListener("click", () => {
+  const hidden = document.body.toggleAttribute("data-nofilters");
+  localStorage.setItem("rb-filters", hidden ? "off" : "on");
+});
 
 // ---------- wiring ----------
 
@@ -497,6 +635,8 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "/" && document.activeElement !== $("#q")) { e.preventDefault(); $("#q").focus(); $("#q").select(); }
 });
 
+buildFilters();
+if ((localStorage.getItem("rb-filters") || (S.showFilters === false ? "off" : "on")) === "off") document.body.setAttribute("data-nofilters", "");
 $("#synced").textContent = `${CARDS.length} cards · synced ${synced.slice(0, 10)}`;
 $("#q").value = decodeURIComponent(location.hash.slice(1));
 render();

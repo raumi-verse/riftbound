@@ -3,18 +3,23 @@
 
     python3 sync.py            # cards only, images are loaded from Piltover Archive's CDN
     python3 sync.py --images   # also keep every picture in web/img/ for offline use
+
+The game's symbols (domains, might, exhaust, energy, types, rarities, keyword banners) are kept in web/icons/;
+only missing ones are downloaded.
 """
 import json
 import re
 import sys
 import time
 import unicodedata
+import urllib.parse
 import urllib.request
 from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 
 API = "https://piltoverarchive.com/api/external/v1"
+CDN = "https://cdn.piltoverarchive.com"
 UA = {"User-Agent": "riftbound-browser/1 (personal card browser)"}
 WEB = Path(__file__).resolve().parent / "web"
 DOMAINS = {"fury", "calm", "mind", "body", "chaos", "order"}
@@ -150,6 +155,49 @@ def build(variants, sets):
     return cards, sets_out
 
 
+def download(url, f):
+    if f.exists():
+        return True
+    try:
+        with urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=30) as r:
+            data = r.read()
+    except Exception as e:
+        if getattr(e, "code", None) != 404:  # a keyword without its own numbered banner is expected
+            print(f"  {url}: {e}", file=sys.stderr)
+        return False
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_bytes(data)
+    return True
+
+
+def save_icons(cards):
+    """The symbols into web/icons/; returns {keyword: icon path} for the keyword banners that exist,
+    "assault 2" and "assault" separately (the page falls back to the plain banner plus the number)."""
+    out = WEB / "icons"
+    for name in [*sorted(DOMAINS), "might", "tap", "rune"]:
+        download(f"{CDN}/icons/{name}.webp", out / f"{name}.webp")
+    download(f"{CDN}/icons/neutral.svg", out / "colorless.svg")
+    energies = {int(m) for c in cards for m in re.findall(r":rb_energy_(\d+):", c["alltext"])}
+    energies |= {c["energy"] for c in cards if c["energy"] is not None}
+    for n in sorted(energies):
+        download(f"{CDN}/icons/{n}.svg", out / f"{n}.svg")
+    for t in {c["type"] for c in cards}:
+        download(f"{CDN}/types/{urllib.parse.quote(t.lower())}.webp", out / f"type-{t.lower().replace(' ', '-')}.webp")
+    for r in {p["rarity"] for c in cards for p in c["printings"]}:
+        download(f"{CDN}/rarities/{r.lower()}.webp", out / f"rarity-{r.lower()}.webp")
+    kws = {}
+    for c in cards:
+        for m in re.finditer(r"\[([A-Za-z][A-Za-z -]*?)( \d+)?\]", c["alltext"]):
+            for k in filter(None, [m.group(1) + (m.group(2) or ""), m.group(1)]):
+                k = k.lower()
+                if k in kws:
+                    continue
+                f = out / "kw" / (re.sub(r"\W+", "-", k) + ".svg")
+                remote = "Reaction" if k == "reaction" else urllib.parse.quote(k.upper())
+                kws[k] = f"icons/kw/{f.name}" if download(f"{CDN}/description_keywords/{remote}.svg", f) else None
+    return {k: v for k, v in sorted(kws.items()) if v}
+
+
 def save_images(cards):
     out = WEB / "img"
     out.mkdir(exist_ok=True)
@@ -173,16 +221,17 @@ def main():
     sets = get("/sets")["data"]
     variants = fetch_all()
     cards, sets = build(variants, sets)
+    keywords = save_icons(cards)
     if "--images" in sys.argv:
         print("saving images…", file=sys.stderr)
         save_images(cards)
     out = WEB / "cards.js"
     if out.exists():  # same cards as last time: leave the file (and its date) alone, so git sees no change
         old = json.loads(out.read_text().removeprefix("window.DATA = ").rstrip().rstrip(";"))
-        if old["cards"] == cards and old["sets"] == sets:
+        if old["cards"] == cards and old["sets"] == sets and old.get("keywords") == keywords:
             print(f"{len(variants)} printings, no changes", file=sys.stderr)
             return
-    data = {"synced": datetime.now(timezone.utc).isoformat(timespec="seconds"), "sets": sets, "cards": cards}
+    data = {"synced": datetime.now(timezone.utc).isoformat(timespec="seconds"), "sets": sets, "keywords": keywords, "cards": cards}
     out.write_text("window.DATA = " + json.dumps(data, ensure_ascii=False) + ";\n")
     champs = {c["champion"] for c in cards if c["champion"]}
     print(f"{len(variants)} printings -> {len(cards)} cards, {len(champs)} champions -> web/cards.js", file=sys.stderr)

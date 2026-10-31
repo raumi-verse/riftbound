@@ -17,6 +17,10 @@ Radiance and the Nexus Night/Worlds printings).
 
 Press `/` to focus the search; the `?` button has the full cheat sheet. The query is in the URL, so searches can be bookmarked.
 
+The filter bar under the search has the everyday filters as the game's symbols: domains (any of / all of / within),
+energy, type, rarity, plus legend (`for:`), keyword, set, sort and grouping. It only writes terms into the query
+(`d:fury|chaos e:2|3 t:unit`), so a click is a start you can keep typing on; **Filters** hides it.
+
 | query | gives |
 |---|---|
 | `group:champion` | every champion: legend, champion units, signatures, other cards with the tag |
@@ -29,6 +33,7 @@ Press `/` to focus the search; the `?` button has the full cheat sheet. The quer
 | `kw:accelerate e<=3` | cheap units with Accelerate |
 | `o:/when you conquer/ sort:-might view:list` | rules text regex, list view |
 | `(t:spell or t:gear) -d:fury r:epic` | or, brackets, not |
+| `t:unit\|gear e:7+ kw:tank\|shield` | `a\|b` is any of them in any field, `7+` is 7 or more |
 | `show:printings is:alt` | every alternate-art printing |
 
 By default reprints, alternate arts, overnumbered, signature and metal prints of a card are folded into one entry
@@ -42,6 +47,8 @@ folding, hiding tokens/runes, domain order. Edit and reload.
 ## Files
 
 - `sync.py`: fetch, fold printings into cards, link champions, write `web/cards.js`
+- `web/icons/`: the game's symbols (domains, might, exhaust, energy, types, rarities, keyword banners) from Piltover
+  Archive's CDN; `sync.py` downloads missing ones
 - `web/app.js`: query parser, filters, sorting, grouping, rendering
 - `web/index.html`, `web/style.css` (Catppuccin Mocha)
 

@@ -45,24 +45,40 @@ section > h2 small { color: var(--overlay); font-weight: normal; font-size: 13px
 /* fixed widths so the tables of one page line up */
 .list th:nth-child(1) { width: 17rem; } .list th:nth-child(2) { width: 8rem; } .list th:nth-child(3) { width: 9rem; }
 .list th:nth-child(4) { width: 5rem; } .list th:nth-child(n+5):nth-child(-n+7) { width: 2.6rem; text-align: right; }
-.list th:nth-child(8) { width: 6rem; } .list th:nth-child(9) { width: 5.5rem; }
+.list th:nth-child(7) { width: 4.6rem; } .list th:nth-child(8) { width: 7.5rem; } .list th:nth-child(9) { width: 5.5rem; }
 .list th { text-align: left; font-weight: 600; color: var(--subtext); padding: .3rem .5rem; border-bottom: 1px solid var(--surface1); cursor: pointer; user-select: none; white-space: nowrap; }
 .list th:not([data-sort]) { cursor: default; }
 .list th[data-sort]:hover { color: var(--accent); }
 .list td { padding: .3rem .5rem; border-bottom: 1px solid var(--surface0); vertical-align: top; }
 .list tr:hover td { background: var(--mantle); cursor: pointer; }
 .list .nm { font-weight: 600; }
-.list .n { text-align: right; font-variant-numeric: tabular-nums; }
+.list td:nth-child(3), .list td:nth-child(8) { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.list .n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .list .tx { color: var(--subtext); font-size: 13px; }
 .list small { color: var(--overlay); }
 .role { font-size: 10px; background: var(--surface0); border-radius: 3px; padding: 0 .3em; }
 
-.dot { display: inline-block; width: .8em; height: .8em; border-radius: 50%; background: var(--c); margin-right: 2px; vertical-align: -1px; }
+/* the game's symbols (web/icons/) */
+.ic { display: inline-block; height: 1.15em; width: auto; vertical-align: -.22em; margin: 0 .05em; }
+.ic.ty, .ic.ra { height: 1.05em; }
+.kwb { height: 1.25em; vertical-align: -.28em; }
+.kwn { font-weight: 700; margin: 0 .15em 0 .2em; }
 .kw { color: var(--text); font-weight: 600; }
-.ic { display: inline-block; font-size: .85em; vertical-align: baseline; }
-.ic.energy { min-width: 1.3em; text-align: center; border-radius: 50%; background: var(--text); color: var(--base); font-weight: 700; }
-.ic.rune { width: .8em; height: .8em; border-radius: 2px; transform: rotate(45deg); background: var(--c); }
-.ic.rune.any { background: conic-gradient(var(--fury), var(--body), var(--order), var(--calm), var(--mind), var(--chaos), var(--fury)); }
+
+#filters { display: flex; flex-wrap: wrap; gap: .4rem 1rem; align-items: center; padding: .5rem 1rem; background: var(--mantle); border-bottom: 1px solid var(--surface0); }
+body[data-nofilters] #filters { display: none; }
+.fg { display: flex; flex-wrap: wrap; gap: .2rem; align-items: center; }
+.tg { font: inherit; display: inline-flex; align-items: center; justify-content: center; min-width: 2.1rem; height: 2.1rem; padding: 0 .3rem;
+  background: var(--surface0); color: var(--text); border: 1px solid transparent; border-radius: 6px; cursor: pointer; }
+.tg .ic { height: 1.45rem; margin: 0; filter: grayscale(1); opacity: .7; transition: filter .1s, opacity .1s; }
+.tg:hover .ic { opacity: .9; filter: none; }
+.tg.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 22%, var(--surface0)); }
+.tg.on .ic { filter: none; opacity: 1; }
+.en-b { display: inline-flex; align-items: center; font-weight: 700; font-size: 13px; }
+.tg[data-f=energy] .ic { height: 1.3rem; }
+#filters select { font: inherit; font-size: 13px; height: 2.1rem; background: var(--surface0); color: var(--text); border: 1px solid transparent; border-radius: 6px; padding: 0 .4rem; max-width: 14rem; }
+#filters .clear { font: inherit; height: 2.1rem; background: none; color: var(--overlay); border: 0; cursor: pointer; padding: 0 .5rem; }
+#filters .clear:hover { color: var(--red); }
 
 dialog { border: 1px solid var(--surface1); border-radius: 10px; background: var(--mantle); color: var(--text); padding: 1rem; width: min(980px, 95vw); max-height: 92vh; }
 dialog[open] { display: flex; gap: 1.2rem; }

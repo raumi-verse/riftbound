@@ -14,6 +14,10 @@ window.SETTINGS = {
   // "grid" (card pictures) or "list" (a table with rules text). The ▦/☰ button switches.
   view: "grid",
 
+  // Show the filter bar (domains, energy, type, rarity, legend, keyword, set, sort, groups) under the
+  // search. The Filters button hides it; that choice is remembered in the browser.
+  showFilters: true,
+
   // Card width in the grid, in pixels.
   cardWidth: 200,
 
