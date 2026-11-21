@@ -52,9 +52,31 @@ By default reprints, alternate arts, overnumbered, signature and metal prints of
 **Export** (in the header) copies the results as names, as printing ids, or as a link that brings back exactly
 this list (`id=OGN-275|SFD-207 …`), or downloads them as a CSV. A card's champion is the champion's tag; legends and units are linked by name.
 
+## Goldfish
+
+`goldfish.html` (the **Goldfish** link in the header, rb.raumi.dev/search/goldfish.html): paste a deck (a Piltover deck
+code, or `2 Name` lines with or without `Legend:` `Champion:` `MainDeck:` `Battlefields:` `Runes:` headers) and it plays
+the deck alone 20 000 times, no opponent and **no card text**. It shows per turn:
+
+- runes on the board, cost paid, how often all runes got used, nothing could be played, or a card had enough runes but
+  not of its domain ("wrong domains"), and how often both domains are out
+- per card, how often it can be played on each turn (hover: how often it's in hand, how often it was played)
+- every split of the rune deck between the legend's two domains, best first, against yours
+
+The deck is checked against the deck building rules first (40 cards with the champion, 3 copies, 3 signatures, 12 runes,
+3 battlefields, the legend's domains) and kept in the URL, so a run can be bookmarked or shared.
+
+Modelled: opening hand 4, mulligan (set aside up to 2 cards costing more than 3, draw as many, recycle them), 2 runes a
+turn (+1 on the first turn going second), draw 1, the chosen champion playable from its zone, energy by exhausting a
+rune, power by recycling a rune of the card's domain (it leaves the board). Each turn it plays the dearest cards it can
+pay for. Not modelled: anything a card's text does (draw, ramp, cost changes), and which domain each power symbol of a
+two-domain card needs (any of its domains pays). The numbers are in `web/settings.js` under `goldfish`; two rules there
+aren't confirmed yet: whether the first player draws on turn 1, and whether one rune may be exhausted and then recycled
+in the same turn.
+
 ## Settings
 
-`web/settings.js` (commented): default query, default sort, the sort inside champion groups, grid/list, card size,
+`web/settings.js` (commented): the goldfish rules (`goldfish`), default query, default sort, the sort inside champion groups, grid/list, card size,
 folding, hiding tokens/runes, domain order. Edit and reload.
 
 ## Files
@@ -63,9 +85,11 @@ folding, hiding tokens/runes, domain order. Edit and reload.
 - `web/icons/`: the game's symbols (domains, might, exhaust, energy, types, rarities, keyword banners) from Piltover
   Archive's CDN; `sync.py` downloads missing ones
 - `web/query.js`: query parser, filters, sorting, grouping (no DOM)
+- `web/deck.js`: reading decks (lists, Piltover deck codes) and the deck building rules (no DOM)
+- `web/sim.js`: the goldfish simulator (no DOM); `web/goldfish.html`, `web/goldfish.js`: its page
 - `web/app.js`: rendering, filter bar, card dialog
 - `web/sw.js`, `web/manifest.webmanifest`: offline use and installing as an app
-- `test/`: the query engine on the real cards, `node --test test/*.test.mjs` (also run before every deploy)
+- `test/`: the query engine, decks and the simulator on the real cards, `node --test test/*.test.mjs` (also run before every deploy)
 - `web/index.html`, `web/style.css` (Catppuccin Mocha)
 
 ## Legal
