@@ -4,7 +4,8 @@
 // cache names only change if this file's layout of them does.
 const SHELL = "shell-v1", ICONS = "icons-v1", IMAGES = "images-v1";
 const KEEP_IMAGES = 1500; // card pictures, ~100 KB each (about every printing, ~150 MB); oldest dropped first
-const SHELL_FILES = ["./", "index.html", "style.css", "settings.js", "cards.js", "query.js", "app.js", "manifest.webmanifest"];
+const SHELL_FILES = ["./", "index.html", "style.css", "settings.js", "cards.js", "query.js", "app.js", "manifest.webmanifest",
+  "goldfish.html", "deck.js", "sim.js", "goldfish.js"];
 
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(SHELL).then((c) => c.addAll(SHELL_FILES)).then(() => self.skipWaiting()));
