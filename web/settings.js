@@ -30,4 +30,26 @@ window.SETTINGS = {
 
   // Order of the domains when sorting by domain.
   domainOrder: ["Fury", "Calm", "Mind", "Body", "Chaos", "Order"],
+
+  // The goldfish page (goldfish.html): a deck played alone, no opponent, no card text.
+  goldfish: {
+    // Games per run (20000: about a second), and per rune split when trying them all.
+    games: 20000,
+    splitGames: 5000,
+    // Turns shown.
+    turns: 6,
+    // Mulligan: set aside up to mulliganMax cards costing more than keepEnergy, draw as many, recycle them.
+    // mulliganMax: 0 keeps every opening hand.
+    mulliganMax: 2,
+    keepEnergy: 3,
+    // The game's numbers (Core Rules): opening hand, runes channeled per turn, extra runes for the player
+    // going second on their first turn.
+    handSize: 4,
+    channel: 2,
+    secondExtra: 1,
+    // Does the player going first draw on turn 1? (Not confirmed for 1v1; multiplayer modes skip it.)
+    firstPlayerDraws: true,
+    // May one rune be exhausted for energy and then recycled for power in the same turn? (Not confirmed.)
+    exhaustThenRecycle: true,
+  },
 };
