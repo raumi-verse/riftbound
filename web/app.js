@@ -450,6 +450,10 @@ $("#entry").addEventListener("keydown", (e) => {
   if ($("#entry-out .err") == null) e.target.value = "";
 });
 
+// scanning with the camera (scan.js)
+const openScan = initScan((items) => { COLL.apply(items); $("#entry-out").innerHTML = `<span>Added ${items.reduce((n, i) => n + i.n, 0)} scanned cards.</span>`; });
+$("#scan-open").addEventListener("click", () => openScan());
+
 // pasting a list
 const imp = $("#import");
 let pasted = null;

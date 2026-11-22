@@ -2,10 +2,10 @@
 // The page itself network-first, so the weekly cards.js is never stale while online; icons and card pictures
 // from the cache once seen. The page is never served from an old cache when the network works, so the
 // cache names only change if this file's layout of them does.
-const SHELL = "shell-v1", ICONS = "icons-v1", IMAGES = "images-v1";
+const SHELL = "shell-v1", ICONS = "icons-v1", IMAGES = "images-v1", LIBS = "libs-v1"; // libs: the scan's OCR (jsdelivr)
 const KEEP_IMAGES = 1500; // card pictures, ~100 KB each (about every printing, ~150 MB); oldest dropped first
 const SHELL_FILES = ["./", "index.html", "style.css", "settings.js", "cards.js", "query.js", "app.js", "manifest.webmanifest",
-  "goldfish.html", "deck.js", "sim.js", "goldfish.js", "store.js", "sync.js", "account.js", "collection.js"];
+  "goldfish.html", "deck.js", "sim.js", "goldfish.js", "store.js", "sync.js", "account.js", "collection.js", "scan.js"];
 
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(SHELL).then((c) => c.addAll(SHELL_FILES)).then(() => self.skipWaiting()));
@@ -13,7 +13,7 @@ self.addEventListener("install", (e) => {
 
 self.addEventListener("activate", (e) => {
   e.waitUntil(caches.keys()
-    .then((keys) => Promise.all(keys.filter((k) => ![SHELL, ICONS, IMAGES].includes(k)).map((k) => caches.delete(k))))
+    .then((keys) => Promise.all(keys.filter((k) => ![SHELL, ICONS, IMAGES, LIBS].includes(k)).map((k) => caches.delete(k))))
     .then(() => self.clients.claim()));
 });
 
@@ -21,6 +21,7 @@ self.addEventListener("fetch", (e) => {
   const req = e.request, url = new URL(req.url);
   if (req.method !== "GET") return;
   if (url.hostname === "cdn.piltoverarchive.com") return e.respondWith(cacheFirst(IMAGES, req, true));
+  if (url.hostname === "cdn.jsdelivr.net" && /@\d/.test(url.pathname)) return e.respondWith(cacheFirst(LIBS, req, true)); // pinned versions only
   if (url.origin !== location.origin) return;
   if (url.pathname.includes("/icons/")) return e.respondWith(cacheFirst(ICONS, req));
   if (url.pathname.includes("/img/")) return e.respondWith(cacheFirst(IMAGES, req)); // sync.py --images

@@ -3,6 +3,9 @@ window.SETTINGS = {
   // The sync server (server.py) the account button logs in to; the login dialog can change it per browser.
   syncServer: "https://api.rb.raumi.dev",
 
+  // Scanning: show what the text recognition read in each frame (for tuning).
+  scanDebug: false,
+
   // What the page shows when the search box is empty, e.g. "group:champion" or "-is:token".
   defaultQuery: "",
 
