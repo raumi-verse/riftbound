@@ -1,5 +1,8 @@
 // Your settings for the Riftbound browser. Edit, save, reload the page.
 window.SETTINGS = {
+  // The sync server (server.py) the account button logs in to; the login dialog can change it per browser.
+  syncServer: "https://api.rb.raumi.dev",
+
   // What the page shows when the search box is empty, e.g. "group:champion" or "-is:token".
   defaultQuery: "",
 

@@ -176,6 +176,32 @@ nav.pages a { color: var(--subtext); padding: .45rem .6rem; border-radius: 6px; 
 nav.pages a:hover { color: var(--text); background: var(--surface0); text-decoration: none; }
 nav.pages a[aria-current] { color: var(--accent); }
 
+/* the account button and dialog (account.js) */
+#account { margin-left: auto; display: flex; align-items: center; gap: .4rem; white-space: nowrap; }
+.dot { display: inline-block; width: .55rem; height: .55rem; border-radius: 50%; background: var(--overlay); flex: none; }
+[data-status="idle"] .dot, .dot[data-status="idle"] { background: var(--calm); }
+[data-status="syncing"] .dot, .dot[data-status="syncing"] { background: var(--mind); }
+[data-status="offline"] .dot, .dot[data-status="offline"] { background: var(--order); }
+[data-status="error"] .dot, .dot[data-status="error"] { background: var(--red); }
+dialog.acct { width: min(560px, 95vw); }
+dialog.acct[open] { display: block; }
+dialog.acct h2 { display: flex; justify-content: space-between; align-items: center; }
+dialog.acct h3 { margin: 1.2rem 0 .3rem; font-size: 15px; }
+dialog.acct .x { font: inherit; background: none; border: 0; color: var(--overlay); cursor: pointer; font-size: 16px; }
+dialog.acct .note, dialog.acct small { color: var(--overlay); font-size: 13px; }
+dialog.acct .err { color: var(--red); }
+dialog.acct form.login { display: grid; gap: .6rem; }
+dialog.acct label { display: grid; gap: .2rem; color: var(--subtext); }
+dialog.acct summary { color: var(--subtext); cursor: pointer; }
+dialog.acct .row { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; margin: .4rem 0; }
+dialog.acct input, dialog.acct button { font: inherit; background: var(--surface0); color: var(--text); border: 1px solid var(--surface1); border-radius: 6px; padding: .4rem .6rem; }
+dialog.acct input { background: var(--crust); min-width: 0; }
+dialog.acct details input { width: 100%; margin-top: .3rem; }
+dialog.acct button { cursor: pointer; border-color: transparent; }
+dialog.acct form button, dialog.acct .sync { background: color-mix(in srgb, var(--accent) 35%, var(--surface0)); }
+dialog.acct code.tok { word-break: break-all; padding: .3rem .5rem; user-select: all; }
+@media (max-width: 700px) { #account .who { display: none; } dialog.acct { margin: auto; border-radius: 10px; } }
+
 /* goldfish */
 .gf { max-width: 1000px; margin: 0 auto; padding-top: 1rem; }
 .gf label { color: var(--subtext); }
