@@ -58,6 +58,14 @@ test("matches and records", () => {
   assert.equal(G("STORE").get("match", m1).result, "win"); // the rest kept
 });
 
+test("cardIdOf: a legend from the table as any printing", () => {
+  const cardIdOf = G("cardIdOf");
+  assert.equal(cardIdOf("OGN-251"), "OGN-251");
+  assert.equal(cardIdOf("ogn-030a"), "OGN-030");
+  assert.equal(cardIdOf(null), null);
+  assert.equal(cardIdOf("XYZ-1"), "XYZ-1");
+});
+
 test("missing cards against the collection, any printing counting", () => {
   COLL.set("OGN-030a", 2); // two Jinx, Demolitionist in the alt art
   COLL.set("OGN-007", 6);

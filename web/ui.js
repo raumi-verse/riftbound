@@ -6,7 +6,9 @@ const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<
 const $ = (s, root = document) => root.querySelector(s);
 const cardImg = (c) => c && (c.printings.find((p) => p.id === c.id)?.img || c.printings.find((p) => p.img)?.img);
 const domainIcons = (c) => (c?.domains || []).map((d) => `<img class="ic" src="icons/${d.toLowerCase()}.webp" alt="${esc(d)}" title="${esc(d)}">`).join("");
-const legendName = (id) => { const c = CARD_BY_ID.get(id); return c ? c.name : id ? "?" : "—"; };
+const legendName = (id) => { const c = cardOf(id); return c ? c.name : id ? "?" : "—"; };
+// the opponent's list as the table sent it (a deck code) or as typed, written out
+const listText = (s) => { if (!s) return ""; if (/^[A-Z2-7]{8,}=*$/i.test(s.trim())) { try { return deckText(readDeck(s.trim())); } catch { /* */ } } return s; };
 const pct = (x) => (x == null ? "–" : `${Math.round(x * 100)}%`);
 const recordText = (r) => r.n ? `${r.win}–${r.loss}${r.draw ? `–${r.draw}` : ""}` : "no games";
 const day = (iso) => (iso ? new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : "");
@@ -36,7 +38,7 @@ function matchDialog(m, done = () => {}) {
       <div class="grid2">
         <label>Deck <select name="deck">${decks.map((d) => `<option value="${esc(d.id)}"${d.id === m.deck ? " selected" : ""}>${esc(d.name)}</option>`).join("")}</select></label>
         <label>Version <select name="deckver">${versions.map((v) => `<option value="${esc(v.id)}"${v.id === (m.deckver || LIB.deck(m.deck)?.version) ? " selected" : ""}>v${v.n} · ${day(v.created)}</option>`).join("") || "<option value=''>–</option>"}</select></label>
-        <label>Opponent's legend <select name="oppLegend">${legendOptions(m.oppLegend)}</select></label>
+        <label>Opponent's legend <select name="oppLegend">${legendOptions(cardIdOf(m.oppLegend))}</select></label>
         <label>Opponent <input name="oppName" value="${esc(m.oppName)}" placeholder="name"></label>
         <label>When <input type="datetime-local" name="date" value="${toLocalInput(m.date)}"></label>
         <label>Event <input name="event" value="${esc(m.event)}" placeholder="e.g. Nexus Night, testing"></label>
@@ -47,7 +49,7 @@ function matchDialog(m, done = () => {}) {
       <div class="score"><div><b>Me</b>${side("me")}</div><div><b>Opponent</b>${side("opp")}</div></div>
       <label>Tags <input name="tags" value="${esc((m.tags || []).join(", "))}" placeholder="comma separated, e.g. mulligan, misplay"></label>
       <label>Notes <textarea name="notes" rows="5" placeholder="How did it go?">${esc(m.notes)}</textarea></label>
-      ${m.oppList ? `<details><summary>Opponent's list</summary><pre>${esc(m.oppList)}</pre></details>` : ""}
+      ${m.oppList ? `<details><summary>Opponent's list</summary><pre>${esc(listText(m.oppList))}</pre></details>` : ""}
       <div class="row">${m.id ? `<button type="button" class="del">Delete</button>` : ""}<span class="grow"></span><button type="submit" class="primary">Save</button></div>
     </form>`;
   const f = dlg.querySelector("form");

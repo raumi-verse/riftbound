@@ -121,12 +121,12 @@ function deckView(id, verId) {
   const cur = LIB.version(d.version), shown = (verId && LIB.version(verId)) || cur;
   const legend = CARD_BY_ID.get(d.legend), all = LIB.matches(id);
   document.title = `${d.name} · Riftbound decks`;
-  const ms = all.filter((m) => (!filters.ver || m.deckver === filters.ver) && (!filters.opp || m.oppLegend === filters.opp)
+  const ms = all.filter((m) => (!filters.ver || m.deckver === filters.ver) && (!filters.opp || cardIdOf(m.oppLegend) === filters.opp)
     && (filters.first === "" || String(m.first) === filters.first) && (!filters.tag || (m.tags || []).includes(filters.tag)));
   const r = record(all);
   const statRows = (rows, label) => rows.map((x) => `<tr><td>${label(x.key)}</td><td class="n">${recordText(x)}</td><td class="n">${pct(x.pct)}</td></tr>`).join("");
   const tags = [...new Set(all.flatMap((m) => m.tags || []))].sort();
-  const opps = [...new Set(all.map((m) => m.oppLegend).filter(Boolean))];
+  const opps = [...new Set(all.map((m) => cardIdOf(m.oppLegend)).filter(Boolean))];
   main.innerHTML = `
     <p><a href="#">← Decks</a></p>
     <div class="deck-head">
@@ -168,7 +168,7 @@ function deckView(id, verId) {
           <tr class="cur"><th>All games</th><td class="n">${recordText(r)}</td><td class="n">${pct(r.pct)}</td></tr>
           ${statRows(recordBy(all.filter((m) => m.first != null), (m) => m.first), (k) => (k ? "Going first" : "Going second"))}
           <tr><th colspan="3">By version</th></tr>${statRows(recordBy(all, (m) => m.deckver), (k) => `v${LIB.version(k)?.n ?? "?"}`)}
-          <tr><th colspan="3">Against</th></tr>${statRows(recordBy(all, (m) => m.oppLegend || ""), (k) => esc(legendName(k)))}
+          <tr><th colspan="3">Against</th></tr>${statRows(recordBy(all, (m) => cardIdOf(m.oppLegend) || ""), (k) => esc(legendName(k)))}
         </tbody></table>` : `<p class="note">No games yet: <b>Play</b> counts the points and saves the game, <b>Log a game</b> enters one played elsewhere.</p>`}
         <h2>Games</h2>
         ${all.length ? `<div class="row filters">

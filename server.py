@@ -221,6 +221,13 @@ def tts_match(db, user, b):
     data = {k: v for k, v in b.items() if k in TTS_MATCH_FIELDS}
     if data.get("result") not in (None, "win", "loss", "draw"):
         raise HTTPError(400, "result is win, loss or draw")
+    # a deck pasted at the table: the deck of yours with that code, if there is one (newest version wins)
+    code = b.get("code")
+    if not data.get("deck") and isinstance(code, str) and code.strip():
+        for vid, v in sorted(live(db, user, "deckver").items(), key=lambda kv: kv[1].get("n", 0), reverse=True):
+            if v.get("code") == code.strip() and v.get("deck") in live(db, user, "deck"):
+                data["deck"], data["deckver"] = v["deck"], vid
+                break
     if data.get("deck"):
         deck = live(db, user, "deck").get(data["deck"])
         if deck is None:

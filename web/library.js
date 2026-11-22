@@ -11,6 +11,9 @@
 
 const STATUSES = ["pinned", "active", "archived"];
 const CARD_BY_ID = new Map(CARDS.map((c) => [c.id, c]));
+// a card from its id or any printing's id (the table sends the printing it has, e.g. OGN-251a); its card id
+const cardOf = (id) => (id && (CARD_BY_ID.get(id) || PRINTS.get(String(id).toUpperCase())?.card)) || null;
+const cardIdOf = (id) => cardOf(id)?.id ?? id ?? null;
 
 const LIB = {
   decks: () => STORE.all("deck").map(({ id, data }) => ({ id, ...data })),

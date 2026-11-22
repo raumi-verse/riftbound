@@ -179,6 +179,14 @@ class Server(unittest.TestCase):
         self.call("POST", "/tts/match", {**game, "result": "loss"}, tts)
         m = {c["id"]: c["data"] for c in self.sync(app)["changes"] if c["kind"] == "match"}["tts-abc"]
         self.assertEqual((m["notes"], m["tags"], m["result"], m["needsNotes"]), ("close one", ["bo3"], "loss", False))
+        # pasted at the table instead of "rb deck": found by its code
+        self.call("POST", "/tts/match", {"id": "tts-pasted", "code": "CEAAA", "result": "win"}, tts)
+        m = {c["id"]: c["data"] for c in self.sync(app)["changes"] if c["kind"] == "match"}["tts-pasted"]
+        self.assertEqual((m.get("deck"), m.get("deckver")), ("d1", "v1"))
+        self.assertNotIn("code", m)
+        self.call("POST", "/tts/match", {"id": "tts-other", "code": "ZZZZ", "result": "win"}, tts)
+        m = {c["id"]: c["data"] for c in self.sync(app)["changes"] if c["kind"] == "match"}["tts-other"]
+        self.assertNotIn("deck", m)
         self.assertEqual(self.call("POST", "/tts/match", {"result": "win"}, tts)[0], 400)
         self.assertEqual(self.call("POST", "/tts/match", {"id": "x", "result": "maybe"}, tts)[0], 400)
 
