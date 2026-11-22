@@ -6,6 +6,7 @@
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 body { margin: 0; background: var(--base); color: var(--text); font: 14px/1.4 system-ui, sans-serif; }
 a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
@@ -248,6 +249,96 @@ dialog.scan[open] { display: flex; flex-direction: column; gap: 0; }
 .scan .tally small { color: var(--overlay); }
 .scan .tally .warn { color: var(--order); }
 .scan .tally .own { background: var(--surface0); color: var(--text); }
+
+/* decks (decks.html) and shared form bits */
+.lib { max-width: 1200px; margin: 0 auto; padding-top: .8rem; }
+.lib h1 { margin: 0; font-size: 22px; }
+.lib h2 { margin: 1.4rem 0 .5rem; font-size: 17px; display: flex; gap: .6rem; align-items: baseline; flex-wrap: wrap; }
+.lib h2 small, .lib h3 small, .lib .note, .lib small { color: var(--overlay); font-weight: normal; font-size: 13px; }
+.lib .head, .lib .row, .form-dlg .row { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
+.grow { flex: 1; }
+.lib button, .lib .btn, .lib select, .lib input, .lib textarea, .form-dlg button, .form-dlg select, .form-dlg input, .form-dlg textarea {
+  font: inherit; background: var(--surface0); color: var(--text); border: 1px solid transparent; border-radius: 6px; padding: .4rem .7rem; }
+.lib button, .lib .btn, .form-dlg button { cursor: pointer; text-decoration: none; display: inline-block; }
+.lib input, .lib textarea, .form-dlg input, .form-dlg textarea { background: var(--crust); border-color: var(--surface1); }
+.lib textarea, .form-dlg textarea { width: 100%; font: 13px/1.45 ui-monospace, monospace; resize: vertical; }
+.form-dlg textarea[name=notes], #notes { font: inherit; }
+.primary { background: color-mix(in srgb, var(--accent) 38%, var(--surface0)) !important; }
+.danger:hover { background: color-mix(in srgb, var(--red) 40%, var(--surface0)) !important; }
+.card-form { display: grid; gap: .6rem; margin: 1rem 0; padding: 1rem; background: var(--mantle); border: 1px solid var(--surface0); border-radius: 10px; }
+.card-form label, .form-dlg label { display: grid; gap: .25rem; color: var(--subtext); }
+.decks { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: .7rem; }
+.deck-tile { position: relative; display: flex; gap: .7rem; padding: .5rem; background: var(--mantle); border: 1px solid var(--surface0); border-radius: 10px; color: var(--text); }
+.deck-tile:hover { border-color: var(--accent); text-decoration: none; }
+.deck-tile .art { flex: none; width: 64px; height: 64px; border-radius: 8px; background: var(--surface0) center 22% / 150% no-repeat; }
+.deck-tile .body { display: grid; gap: .1rem; align-content: start; min-width: 0; }
+.deck-tile .body > b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 1.6rem; }
+.deck-tile .pin { position: absolute; top: .3rem; right: .3rem; background: none !important; color: var(--surface1); font-size: 18px; padding: .1rem .3rem !important; }
+.deck-tile .pin.on, .deck-tile .pin:hover { color: var(--order); }
+.miss { color: var(--red); font-size: 12px; }
+.todo { color: var(--order); font-size: 12px; }
+details.archived { margin-top: 1.2rem; }
+details.archived summary { cursor: pointer; color: var(--subtext); margin-bottom: .6rem; }
+.lib .empty { text-align: left; padding: 1rem 0; }
+.deck-head { display: flex; gap: 1rem; align-items: flex-start; }
+.deck-head .legend { width: 150px; border-radius: 8px; }
+.deck-head .title { font-size: 22px; font-weight: 600; width: 100%; background: none !important; border-color: transparent !important; padding: .1rem .3rem; }
+.deck-head .title:focus { border-color: var(--surface1) !important; outline: none; }
+.deck-head .tags { display: flex; gap: .5rem; align-items: center; color: var(--subtext); margin: .5rem 0; }
+.deck-head .tags input { flex: 1; max-width: 24rem; }
+.seg { display: inline-flex; gap: 0; border: 0; padding: 0; margin: .3rem 0; }
+.seg button, .seg label { border-radius: 0 !important; margin: 0; }
+.seg > :first-child, .seg legend + label { border-radius: 6px 0 0 6px !important; }
+.seg > :last-child { border-radius: 0 6px 6px 0 !important; }
+.seg .on { background: color-mix(in srgb, var(--accent) 38%, var(--surface0)); }
+.cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); gap: 2rem; }
+ul.cards { list-style: none; margin: 0 0 .4rem; padding: 0; }
+ul.cards.two { columns: 2 14rem; }
+ul.cards li { display: flex; gap: .35rem; align-items: center; padding: .1rem 0; break-inside: avoid; }
+ul.cards .n { width: 1.3rem; text-align: right; color: var(--subtext); font-variant-numeric: tabular-nums; }
+ul.cards .ic { width: 1.15em; }
+ul.cards a { color: var(--text); }
+.lib h3 { margin: .9rem 0 .3rem; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--overlay); }
+.problems { color: var(--red); padding-left: 1.2rem; }
+ol.versions { padding-left: 1.6rem; }
+ol.versions li { margin-bottom: .5rem; }
+ol.versions li.on > a { font-weight: 700; }
+.diff { font-size: 13px; }
+.diff .add { color: var(--calm); } .diff .rem { color: var(--red); }
+table.matches { width: 100%; }
+table.matches tbody tr { cursor: pointer; }
+table.matches tbody tr:hover td { background: var(--mantle); }
+table.matches td.notes { white-space: normal; min-width: 12rem; color: var(--subtext); }
+table.matches tr.win .res { color: var(--calm); } table.matches tr.loss .res { color: var(--red); }
+table.rec th { text-align: left; color: var(--subtext); font-weight: 600; padding-top: .6rem; }
+.filters { margin-bottom: .5rem; }
+.filters select { font-size: 13px; }
+img.peek { position: fixed; z-index: 20; width: 230px; border-radius: 10px; box-shadow: 0 8px 30px #000a; pointer-events: none; }
+dialog.form-dlg { width: min(640px, 96vw); }
+dialog.form-dlg[open] { display: block; }
+.form-dlg form { display: grid; gap: .7rem; }
+.form-dlg h2 { margin: 0; display: flex; justify-content: space-between; }
+.form-dlg .x { background: none; color: var(--overlay); }
+.form-dlg .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; }
+.form-dlg fieldset { display: flex; align-items: center; gap: 0; }
+.form-dlg fieldset legend { float: left; color: var(--subtext); margin-right: .7rem; padding: 0; }
+.form-dlg .seg label { display: inline-flex; gap: .3rem; align-items: center; background: var(--surface0); padding: .35rem .7rem; cursor: pointer; }
+.form-dlg .seg label:has(input:checked) { background: color-mix(in srgb, var(--accent) 38%, var(--surface0)); }
+.form-dlg .seg input { display: none; }
+.form-dlg .seg .game { background: none; margin-left: 1rem !important; }
+.form-dlg .score { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+.form-dlg .score > div { display: flex; gap: .4rem; align-items: end; flex-wrap: wrap; }
+.form-dlg .score > div > b { width: 100%; }
+.form-dlg .score label { font-size: 12px; }
+.form-dlg .score input { width: 4rem; }
+.form-dlg pre { white-space: pre-wrap; font-size: 12px; color: var(--subtext); }
+.form-dlg .note { color: var(--overlay); margin: 0; }
+@media (max-width: 900px) { .cols { grid-template-columns: minmax(0, 1fr); gap: 0; } }
+@media (max-width: 700px) {
+  .deck-head .legend { width: 90px; }
+  .form-dlg .grid2, .form-dlg .score { grid-template-columns: 1fr; }
+  dialog.form-dlg { margin: auto 0 0; border-radius: 10px 10px 0 0; }
+}
 
 /* the account button and dialog (account.js) */
 #account { margin-left: auto; display: flex; align-items: center; gap: .4rem; white-space: nowrap; }

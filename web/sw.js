@@ -5,7 +5,8 @@
 const SHELL = "shell-v1", ICONS = "icons-v1", IMAGES = "images-v1", LIBS = "libs-v1"; // libs: the scan's OCR (jsdelivr)
 const KEEP_IMAGES = 1500; // card pictures, ~100 KB each (about every printing, ~150 MB); oldest dropped first
 const SHELL_FILES = ["./", "index.html", "style.css", "settings.js", "cards.js", "query.js", "app.js", "manifest.webmanifest",
-  "goldfish.html", "deck.js", "sim.js", "goldfish.js", "store.js", "sync.js", "account.js", "collection.js", "scan.js"];
+  "goldfish.html", "deck.js", "sim.js", "goldfish.js", "store.js", "sync.js", "account.js", "collection.js", "scan.js",
+  "decks.html", "decks.js", "library.js", "ui.js"];
 
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(SHELL).then((c) => c.addAll(SHELL_FILES)).then(() => self.skipWaiting()));
