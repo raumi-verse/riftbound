@@ -82,6 +82,66 @@ function decodeDeckCode(code) {
   return { main, side, champion, legends, version, unknownSets: [...unknown].sort() };
 }
 
+// encodeDeckCode(deck from readDeck) -> a version 5 code (the newest any decoder in use reads for decks without
+// additional legends). Each card is written as its base printing, or its first printing in a set codes can hold
+// (Nexus Night and Worlds printings can't be written). Legend, champion, runes and battlefields go in the main section,
+// as Piltover does; the chosen champion is also named after the side deck. Throws if a card has no codable printing.
+const PRINT_ID = /^([A-Z]+)-(R|SP)?(\d+)([ab*]?)$/i;
+
+function codable(card) {
+  for (const id of [card.id, ...card.printings.map((p) => p.id)]) {
+    const m = id.match(PRINT_ID);
+    if (m && CODE_SETS.includes(m[1].toUpperCase())) {
+      return { set: CODE_SETS.indexOf(m[1].toUpperCase()), prefix: { R: 1, SP: 2 }[(m[2] || "").toUpperCase()] ?? 0,
+        num: +m[3], variant: { "": 0, a: 1, "*": 2, b: 3 }[m[4].toLowerCase()] };
+    }
+  }
+  throw new Error(`${card.name} has no printing a deck code can hold`);
+}
+
+function base32Encode(bytes) {
+  let out = "", buffer = 0, bits = 0;
+  for (const b of bytes) {
+    buffer = ((buffer << 8) | b) & 0xffff; bits += 8;
+    while (bits >= 5) { bits -= 5; out += B32[(buffer >> bits) & 31]; }
+  }
+  if (bits > 0) out += B32[(buffer << (5 - bits)) & 31];
+  return out;
+}
+
+function encodeDeckCode(d) {
+  const out = [];
+  const varint = (n) => { while (n >= 128) { out.push((n & 127) | 128); n = Math.floor(n / 128); } out.push(n); };
+  const all = [d.legend, d.champion, ...d.main, ...d.battlefields, ...d.runes].filter(Boolean);
+  const flagged = [...all, ...d.side].some((c) => codable(c).prefix !== 0);
+  const number = (x) => { if (flagged) out.push(x.prefix); varint(x.num); };
+  const section = (cards) => {
+    const counts = new Map(); // card id -> [codable, count]
+    for (const c of cards) { const e = counts.get(c.id) || [codable(c), 0]; e[1]++; counts.set(c.id, e); }
+    const byCount = new Map(); // count -> "set/variant" -> [codable…]
+    for (const [x, n] of counts.values()) {
+      const g = byCount.get(n) || new Map(), k = `${x.set}/${x.variant}`;
+      g.set(k, [...(g.get(k) || []), x]);
+      byCount.set(n, g);
+    }
+    const ordered = [...byCount].sort((a, b) => b[0] - a[0]);
+    varint(ordered.length);
+    for (const [n, groups] of ordered) {
+      varint(n);
+      varint(groups.size);
+      for (const xs of groups.values()) {
+        varint(xs.length); out.push(xs[0].set, xs[0].variant);
+        for (const x of xs.sort((a, b) => a.num - b.num)) number(x);
+      }
+    }
+  };
+  out.push(0x15, flagged ? 1 : 0);
+  section(all);
+  section(d.side);
+  if (d.champion) { const x = codable(d.champion); out.push(1, x.set, x.variant); number(x); } else out.push(0);
+  return base32Encode(out);
+}
+
 // ---------- reading a deck ----------
 // readDeck(text): a deck code, or a list of "2 Name" / "2x Name" lines, optionally under headers
 // (Legend: Champion: MainDeck: Battlefields: Runes: Sideboard:, Piltover's text export). Without headers each card

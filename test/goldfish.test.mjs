@@ -9,7 +9,7 @@ const ctx = vm.createContext({});
 ctx.window = ctx;
 for (const f of ["web/settings.js", "web/cards.js", "web/query.js", "web/deck.js", "web/sim.js"]) vm.runInContext(readFileSync(new URL(f, root), "utf8"), ctx, { filename: f });
 const G = (name) => vm.runInContext(name, ctx);
-const readDeck = G("readDeck"), deckText = G("deckText"), decodeDeckCode = G("decodeDeckCode"), goldfish = G("goldfish"), runeSplits = G("runeSplits");
+const readDeck = G("readDeck"), deckText = G("deckText"), decodeDeckCode = G("decodeDeckCode"), encodeDeckCode = G("encodeDeckCode"), goldfish = G("goldfish"), runeSplits = G("runeSplits");
 const CARDS = G("CARDS"), playable = G("playable");
 
 // A legal 40-card Jinx deck from the card data: the legend, a champion unit x3, 12 other cards x3 and one x1, 6/6 runes,
@@ -131,6 +131,35 @@ test("readDeck takes a deck code and maps printing ids to cards", () => {
   assert.equal(d.runes.length, 3);
   assert.equal(d.runes[0].name, "Fury Rune");
   assert.ok(d.problems.some((p) => /no legend/.test(p)));
+});
+
+test("encodeDeckCode gives a code that reads back as the same deck", () => {
+  const d = readDeck(list());
+  const code = encodeDeckCode(d);
+  assert.match(code, /^[A-Z2-7]+$/);
+  const back = readDeck(code);
+  assert.deepEqual([...back.problems], []);
+  const lines = (x) => deckText(x).split("\n").sort();
+  assert.deepEqual(lines(back), lines(d));
+  assert.equal(back.champion.id, d.champion.id);
+  const raw = plain(decodeDeckCode(code));
+  assert.equal(raw.version, 5);
+  assert.equal(raw.main.find((e) => e.code === legend.id).count, 1);
+  assert.equal(raw.main.find((e) => e.code === champion.id).count, 3); // the chosen one is in the main section too
+});
+
+test("encodeDeckCode: runes with R numbers, alt printings, the side deck", () => {
+  const fury = CARDS.find((c) => c.name === "Fury Rune");
+  const sfdRune = { ...fury, id: "SFD-R01" }; // as if its base printing were the Spiritforged one
+  const promoOnly = CARDS.find((c) => !/^(OGN|OGS|ARC|SFD|UNL|VEN|RAD)-/.test(c.id) && c.printings.some((p) => /^(OGN|SFD|UNL)-\d+$/.test(p.id)));
+  const d = { legend, champion, main: [], battlefields: [], runes: [sfdRune, sfdRune], side: [fillers[0]], problems: [] };
+  if (promoOnly) d.main.push(promoOnly);
+  const raw = plain(decodeDeckCode(encodeDeckCode(d)));
+  assert.deepEqual(raw.main.find((e) => e.code === sfdRune.id), { code: sfdRune.id, count: 2 });
+  assert.deepEqual(raw.side, [{ code: fillers[0].id, count: 1 }]);
+  if (promoOnly) assert.ok(raw.main.some((e) => promoOnly.printings.some((p) => p.id === e.code)));
+  const token = { name: "Nowhere", id: "XYZ-001", printings: [] };
+  assert.throws(() => encodeDeckCode({ ...d, main: [token] }), /no printing/);
 });
 
 // ---------- the simulator against exact maths ----------
