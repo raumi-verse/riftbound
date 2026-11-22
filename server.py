@@ -32,6 +32,7 @@ import json
 import os
 import re
 import secrets
+import signal
 import sqlite3
 import sys
 import threading
@@ -479,6 +480,8 @@ def main():
     if a.cmd == "serve":
         srv = make_server(a.db, a.host, a.port, proxy=a.proxy)
         print(f"rb sync on {a.host}:{srv.server_address[1]}, {a.db}", file=sys.stderr, flush=True)
+        # in a container it's process 1, which ignores SIGTERM unless told: stop at once (docker stop, the backup)
+        signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
         try:
             srv.serve_forever()
         except KeyboardInterrupt:
