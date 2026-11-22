@@ -3,6 +3,11 @@ window.SETTINGS = {
   // The sync server (server.py) the account button logs in to; the login dialog can change it per browser.
   syncServer: "https://api.rb.raumi.dev",
 
+  // Play: the points a game is won at (8 in a 1 v 1), and whether the opponent's half of the counter is upside
+  // down by default (the phone flat on the table between you).
+  playTarget: 8,
+  playFaceToFace: false,
+
   // Scanning: show what the text recognition read in each frame (for tuning).
   scanDebug: false,
 

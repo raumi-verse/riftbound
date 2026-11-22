@@ -7,6 +7,11 @@
   "display": "standalone",
   "background_color": "#1e1e2e",
   "theme_color": "#181825",
+  "shortcuts": [
+    { "name": "Play", "short_name": "Play", "description": "Count a game's points", "url": "play.html" },
+    { "name": "Decks", "short_name": "Decks", "url": "decks.html" },
+    { "name": "Collection", "short_name": "Collection", "url": "./" }
+  ],
   "icons": [
     { "src": "icons/app-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
     { "src": "icons/app-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }

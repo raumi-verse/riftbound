@@ -66,3 +66,39 @@ test("missing cards against the collection, any printing counting", () => {
   assert.equal(m["Fury Rune"], undefined);
   assert.deepEqual(m["Chaos Rune"], [6, 0]);
 });
+
+test("a game: points by kind, undo, turns, winner, best of 3", () => {
+  const GAME = G("GAME");
+  const { deck } = LIB.save(null, base);
+  let g = GAME.start({ deck, first: true, target: 3, bo: 3 });
+  assert.equal(GAME.mine(g), true);
+  g = GAME.point(g, "me", "conquer");
+  g = GAME.point(g, "opp", "hold");
+  g = GAME.nextTurn(g);
+  assert.equal(GAME.mine(g), false);
+  g = GAME.point(g, "me", "hold");
+  g = GAME.point(g, "opp", "extra", -1); // nothing to take away
+  assert.equal(GAME.total(g, "me"), 2);
+  g = GAME.point(g, "me", "extra");
+  assert.equal(GAME.winner(g), "me");
+  g = GAME.undo(g);
+  assert.equal(GAME.winner(g), null);
+  g = GAME.undo(g); g = GAME.undo(g); // the hold, then the turn
+  assert.equal(g.turn, 1);
+  assert.deepEqual(plain(g.me), { conquer: 1, hold: 0, extra: 0 });
+  const m = plain(GAME.toMatch(g, "loss"));
+  assert.equal(m.deck, deck);
+  assert.equal(m.game, 1);
+  assert.deepEqual(m.log.map((l) => l.kind), ["conquer", "hold"]);
+  // lost game 1: game 2, I go first; won game 2 and 3: done
+  const g2 = GAME.next(g, "loss", "m1");
+  assert.equal(g2.game, 2);
+  assert.equal(g2.first, true);
+  assert.deepEqual(plain(g2.wins), { me: 0, opp: 1 });
+  assert.equal(GAME.total(g2, "me"), 0);
+  const g3 = GAME.next(g2, "win", "m2");
+  assert.equal(g3.game, 3);
+  assert.equal(g3.first, false);
+  assert.equal(GAME.next(g3, "win", "m3"), null);
+  assert.equal(GAME.next(GAME.start({ deck, bo: 1 }), "win", "x"), null);
+});

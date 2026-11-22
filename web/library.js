@@ -103,3 +103,44 @@ function missing(list) {
   return out;
 }
 const scoreOf = (side) => side ? (side.conquer || 0) + (side.hold || 0) + (side.extra || 0) : 0;
+
+// ---------- a game being played (Play page): one record, game/current ----------
+// {deck, deckver, oppLegend, oppName, event, first, target, bo, game, series: [match ids], wins: {me, opp},
+//  turn, me: {conquer, hold, extra}, opp: {…}, log: [{turn, who, kind, delta}], started}
+const GAME = {
+  start(o) {
+    const z = () => ({ conquer: 0, hold: 0, extra: 0 });
+    return { deck: o.deck, deckver: o.deckver ?? LIB.deck(o.deck)?.version ?? null, oppLegend: o.oppLegend || null, oppName: o.oppName || "",
+      event: o.event || "", first: o.first ?? null, target: o.target || 8, bo: o.bo || 1, game: o.game || 1, series: o.series || [],
+      wins: o.wins || { me: 0, opp: 0 }, turn: 1, me: z(), opp: z(), log: [], started: new Date().toISOString() };
+  },
+  total: (g, who) => scoreOf(g[who]),
+  // +1 (or −1) of a kind for one side; never below 0
+  point(g, who, kind, delta = 1) {
+    if (delta < 0 && !g[who][kind]) return g;
+    return { ...g, [who]: { ...g[who], [kind]: g[who][kind] + delta }, log: [...g.log, { turn: g.turn, who, kind, delta }] };
+  },
+  undo(g) {
+    const last = g.log.at(-1);
+    if (!last) return g;
+    if (last.kind === "turn") return { ...g, turn: Math.max(1, g.turn - 1), log: g.log.slice(0, -1) };
+    return { ...g, [last.who]: { ...g[last.who], [last.kind]: g[last.who][last.kind] - last.delta }, log: g.log.slice(0, -1) };
+  },
+  nextTurn: (g) => ({ ...g, turn: g.turn + 1, log: [...g.log, { turn: g.turn, kind: "turn" }] }),
+  // whose turn it is, if who went first is known: turns alternate, the first player has the odd ones
+  mine: (g) => (g.first == null ? null : (g.turn % 2 === 1) === g.first),
+  winner: (g) => (GAME.total(g, "me") >= g.target ? "me" : GAME.total(g, "opp") >= g.target ? "opp" : null),
+  // the match record for this game
+  toMatch(g, result, extra = {}) {
+    return { deck: g.deck, deckver: g.deckver, date: new Date().toISOString(), source: "app", result, first: g.first,
+      me: g.me, opp: g.opp, log: g.log.filter((l) => l.kind !== "turn"), turns: g.turn, oppLegend: g.oppLegend, oppName: g.oppName,
+      event: g.event, game: g.bo > 1 ? g.game : null, tags: [], notes: "", ...extra };
+  },
+  // after a game of a best of 3: the next one (the loser goes first) or null when the series is decided
+  next(g, result, matchId) {
+    const wins = { me: g.wins.me + (result === "win"), opp: g.wins.opp + (result === "loss") };
+    const need = Math.ceil(g.bo / 2);
+    if (g.bo === 1 || wins.me >= need || wins.opp >= need || g.game >= g.bo) return null;
+    return GAME.start({ ...g, game: g.game + 1, series: [...g.series, matchId], wins, first: result === "draw" ? g.first : result === "loss" });
+  },
+};
