@@ -1,7 +1,9 @@
 # riftbound
 
 My own Riftbound card browser: every card in one local file, a search box with a real query language, multi-key sorting
-and grouping, in particular **each champion's legend, champion units and signatures together**.
+and grouping, in particular **each champion's legend, champion units and signatures together**. Around it: your
+[collection](#collection) (scan cards with the phone), your [decks and games](#decks-and-games) with a points counter and
+notes, synced between your devices and the [Tabletop Simulator table](#tabletop-simulator).
 
 ```sh
 python3 sync.py            # pull all cards from Piltover Archive into web/cards.js (a few seconds)
@@ -74,22 +76,81 @@ two-domain card needs (any of its domains pays). The numbers are in `web/setting
 aren't confirmed yet: whether the first player draws on turn 1, and whether one rune may be exhausted and then recycled
 in the same turn.
 
+## Collection
+
+On the search page, **Collection** shows every printing on its own with − count + (on the tile, in the list, and per printing
+in the card dialog); the ones you don't have are dimmed. Hover a card and press `+` or `−`. The search knows your collection:
+`own>=3` (copies in any printing), `own:0`, `ownp>=1 is:alt` (the alt arts you have), `is:owned`, `is:missing`, `sort:-own`, and
+the CSV export has an `own` column.
+
+- **Scan**: on a phone, hold cards into the frame one after another. It reads the collector line (`OGN • 030a/298`: the
+  set comes from the set's size, the letters read badly) and compares the card's art with the printing's picture, so a misread
+  number doesn't add a wrong card; without a readable number the name is read and the art picks the printing. Each card
+  beeps into a list you can check (printing, count) before **Add all**. A card counts again after the frame was empty.
+  Light, a photo instead of the camera, and typing the number are there too. Text recognition is
+  [Tesseract.js](https://github.com/naptha/tesseract.js), loaded the first time you scan and kept for offline use.
+  `scanDebug: true` in `web/settings.js` shows what each frame read.
+- **Quick entry**: `ogn 42`, `OGN-042a x2`, `3x sfd 7`, `sfd r01 -1`, then a number alone for the same set.
+- **Paste list…**: quick entries, printing ids, `3 Name` lines, a CSV with an `id` and an `own`/`count` column (this page's
+  export), or a deck code; add to what you have or set the counts, with a preview.
+
+## Decks and games
+
+`decks.html`: your decks, **pinned** ones (your main decks) on top, **archived** ones folded away with their games kept. A deck
+takes a deck code or a list; saving a changed list makes a new version, and each version shows what changed and its record.
+Per deck: the list with what you're missing, notes, tags, the record going first/second, by version and by opposing legend,
+and its games (filter by version, opponent, first/second, tag). Copy the deck code (for Piltover Archive or the table) or the
+list, or goldfish it.
+
+`play.html` counts a game: both sides' points split into **conquer**, **hold** and **extra**, turns, undo, best of 1 or 3, the
+opponent's half turned to face them (⇅) if the phone lies between you; the screen stays on. At 8 (`playTarget`) it asks for
+the result, tags and notes and saves the game to the deck's current version. A game played elsewhere can be logged by hand.
+
+## Sync
+
+Everything above works in the browser alone. Logged in (the button in the header), the collection, decks and games sync
+between your devices: phone, PC, and the Tabletop Simulator table. Each edit is saved locally first and sent when there's a
+connection; the newest edit of a record wins.
+
+The server is `server.py` (standard library and SQLite only), for you and a few friends, each with their own records:
+
+```sh
+python3 server.py --db rb.sqlite adduser NAME     # asks for a password; there is no sign-up
+python3 server.py --db rb.sqlite serve --port 8080 [--proxy]
+```
+
+The page talks to `syncServer` in `web/settings.js` (https://api.rb.raumi.dev), or the one typed in the login dialog. CORS
+allows `RB_ORIGINS` (default https://rb.raumi.dev), localhost and pages opened from disk.
+
+## Tabletop Simulator
+
+The [table](https://github.com/raumi-verse/riftbound-tts) loads your decks and saves your games. In the account dialog
+make a token, then in the game's chat: `rb login <token>` once, `rb decks` to list your decks, `rb deck 2` (or a name) to
+spawn one at your seat. The points counters get Conquer / Hold / Extra buttons; when someone reaches 8 the game is saved for
+every seated player who logged in, with the opponent's list. It shows up on the deck's page marked "write notes".
+
 ## Settings
 
 `web/settings.js` (commented): the goldfish rules (`goldfish`), default query, default sort, the sort inside champion groups, grid/list, card size,
-folding, hiding tokens/runes, domain order. Edit and reload.
+folding, hiding tokens/runes, domain order, the sync server, the points to win, scan debugging. Edit and reload.
 
 ## Files
 
 - `sync.py`: fetch, fold printings into cards, link champions, write `web/cards.js`
+- `server.py`: the sync server (accounts, records, the table's endpoints)
 - `web/icons/`: the game's symbols (domains, might, exhaust, energy, types, rarities, keyword banners) from Piltover
   Archive's CDN; `sync.py` downloads missing ones
 - `web/query.js`: query parser, filters, sorting, grouping (no DOM)
-- `web/deck.js`: reading decks (lists, Piltover deck codes) and the deck building rules (no DOM)
+- `web/deck.js`: reading decks (lists, Piltover deck codes), writing deck codes, the deck building rules (no DOM)
 - `web/sim.js`: the goldfish simulator (no DOM); `web/goldfish.html`, `web/goldfish.js`: its page
-- `web/app.js`: rendering, filter bar, card dialog
+- `web/store.js`, `web/sync.js`: the records in the browser and their sync; `web/account.js`: the account button
+- `web/collection.js`: collection counts, quick entry, pasted lists; `web/scan.js`: scanning
+- `web/library.js`: decks, versions, games, records, the game being played (no DOM); `web/ui.js`: the match dialog
+- `web/decks.html`, `web/decks.js`, `web/play.html`, `web/play.js`: the Decks and Play pages
+- `web/app.js`: rendering, filter bar, card dialog, collection mode
 - `web/sw.js`, `web/manifest.webmanifest`: offline use and installing as an app
-- `test/`: the query engine, decks and the simulator on the real cards, `node --test test/*.test.mjs` (also run before every deploy)
+- `test/`: the page's code on the real cards, `node --test test/*.test.mjs`, and the server, `python3 -m unittest discover test`
+  (both run before every deploy)
 - `web/index.html`, `web/style.css` (Catppuccin Mocha)
 
 ## Legal
