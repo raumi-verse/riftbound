@@ -5,6 +5,7 @@ import tempfile
 import threading
 import unittest
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -146,6 +147,40 @@ class Server(unittest.TestCase):
         self.assertTrue(db.set_password("ann", "another-one"))
         self.assertEqual(self.call("GET", "/me", token=t)[0], 401)
         self.login("ann", "another-one")
+
+    def test_table_reads_decks_and_saves_games(self):
+        app = self.login()
+        tts = self.call("POST", "/tokens", {"label": "TTS"}, app)[1]["token"]
+        self.sync(app, 0, [
+            {"kind": "deck", "id": "d1", "data": {"name": "Jinx aggro", "status": "active", "legend": "OGN-251", "version": "v1"}, "updated": 1},
+            {"kind": "deck", "id": "d2", "data": {"name": "Voli", "status": "pinned", "legend": "OGN-249", "version": "v2"}, "updated": 1},
+            {"kind": "deck", "id": "d3", "data": {"name": "Old", "status": "archived", "version": None}, "updated": 1},
+            {"kind": "deckver", "id": "v1", "data": {"deck": "d1", "n": 3, "code": "CEAAA", "ids": "OGN-251 OGN-030", "list": "Legend:\n1 Jinx"}, "updated": 1},
+            {"kind": "deckver", "id": "v2", "data": {"deck": "d2", "n": 1, "code": "", "ids": "OGN-249", "list": "Legend:\n1 Volibear"}, "updated": 1},
+        ])
+        s, decks, _ = self.call("GET", "/tts/decks", token=tts)
+        self.assertEqual(s, 200)
+        self.assertEqual([(d["n"], d["name"], d["version"]) for d in decks], [(1, "Voli", 1), (2, "Jinx aggro", 3)])
+        for key in ("2", "d1", "jinx", "JINX AGGRO", "aggro"):
+            s, d, _ = self.call("GET", "/tts/deck/" + urllib.parse.quote(key), token=tts)
+            self.assertEqual((s, d["id"], d["code"], d["n"]), (200, "d1", "CEAAA", 3), key)
+        self.assertEqual(self.call("GET", "/tts/deck/nope", token=tts)[0], 404)
+        self.assertEqual(self.call("GET", "/tts/deck/old", token=tts)[0], 404)  # found by name, but has no list
+        self.assertEqual(self.call("GET", "/tts/decks", token=self.login("bob"))[1], [])  # another account
+
+        game = {"id": "tts-abc", "deck": "d1", "result": "win", "first": True, "me": {"conquer": 5, "hold": 3, "extra": 0},
+                "opp": {"conquer": 2, "hold": 2, "extra": 0}, "oppLegend": "OGN-249", "oppList": "1 Volibear", "hacked": 1}
+        self.assertEqual(self.call("POST", "/tts/match", game, tts)[0], 200)
+        m = {c["id"]: c["data"] for c in self.sync(app)["changes"] if c["kind"] == "match"}["tts-abc"]
+        self.assertEqual((m["deckver"], m["source"], m["needsNotes"], m["result"]), ("v1", "tts", True, "win"))
+        self.assertNotIn("hacked", m)
+        # notes written in the app survive the table sending the game again
+        self.sync(app, 0, [{"kind": "match", "id": "tts-abc", "data": {**m, "notes": "close one", "tags": ["bo3"]}, "updated": server.now_ms()}])
+        self.call("POST", "/tts/match", {**game, "result": "loss"}, tts)
+        m = {c["id"]: c["data"] for c in self.sync(app)["changes"] if c["kind"] == "match"}["tts-abc"]
+        self.assertEqual((m["notes"], m["tags"], m["result"], m["needsNotes"]), ("close one", ["bo3"], "loss", False))
+        self.assertEqual(self.call("POST", "/tts/match", {"result": "win"}, tts)[0], 400)
+        self.assertEqual(self.call("POST", "/tts/match", {"id": "x", "result": "maybe"}, tts)[0], 400)
 
     def test_cors(self):
         _, _, h = self.call("GET", "/health", headers={"Origin": "https://rb.raumi.dev"})

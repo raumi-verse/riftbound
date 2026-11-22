@@ -15,6 +15,9 @@ here, there is no sign-up.
     GET  /me                                       -> {name}
     POST /sync    {since, changes:[{kind, id, data, updated, deleted}]}  -> {changes, cursor, more}
     GET  /tokens  POST /tokens {label}  DELETE /tokens/<id>              tokens for the Tabletop Simulator table
+    GET  /tts/decks                                -> [{n, id, name, legend, status, version}]  pinned first, no archived
+    GET  /tts/deck/<n | id | name>                 -> {id, name, legend, version, code, ids, list}
+    POST /tts/match {id, deck?, result, me, opp, log, …}  a game from the table (sent again: the same game)
     GET  /health
 
 Tokens go in "Authorization: Bearer …". A table token ("tts") only opens /tts/… .
@@ -166,6 +169,72 @@ class DB:
         return {"changes": out, "cursor": rows[-1]["seq"] if rows else since, "more": more}
 
 
+# --- what the Tabletop Simulator table may read and write --------------------------------------------------------
+# The only server code that knows the page's records: decks (deck), their versions (deckver) and games (match).
+
+TTS_MATCH_FIELDS = {"deck", "deckver", "result", "first", "me", "opp", "log", "turns", "oppLegend", "oppName", "oppList",
+                    "date", "event", "game", "color", "table"}
+
+
+def live(db, user, kind):
+    return {r["id"]: json.loads(r["data"]) for r in db.all("select id, data from records where user = ? and kind = ? and not deleted",
+                                                           user, kind)}
+
+
+def tts_decks(db, user):
+    decks, vers = live(db, user, "deck"), live(db, user, "deckver")
+    out = [{"id": i, "name": d.get("name", ""), "legend": d.get("legend"), "status": d.get("status", "active"),
+            "version": vers.get(d.get("version"), {}).get("n")} for i, d in decks.items() if d.get("status") != "archived"]
+    out.sort(key=lambda d: (d["status"] != "pinned", d["name"].lower()))
+    for n, d in enumerate(out, 1):
+        d["n"] = n
+    return out
+
+
+def tts_deck(db, user, key):
+    decks = tts_decks(db, user)
+    k = key.strip().lower()
+    hit = next((d for d in decks if d["id"] == key), None) or (decks[int(k) - 1] if k.isdigit() and 0 < int(k) <= len(decks) else None)
+    if not hit:  # by name: exactly, then the start, then anywhere (archived decks too, by name)
+        everything = [{"id": i, "name": d.get("name", ""), "legend": d.get("legend"), "status": d.get("status")}
+                      for i, d in live(db, user, "deck").items()]
+        for test in (lambda n: n == k, lambda n: n.startswith(k), lambda n: k in n):
+            found = [d for d in everything if test(d["name"].lower())]
+            if found:
+                hit = found[0]
+                break
+    if not hit:
+        raise HTTPError(404, f"no deck {key}")
+    deck = live(db, user, "deck")[hit["id"]]
+    v = live(db, user, "deckver").get(deck.get("version"))
+    if not v:
+        raise HTTPError(404, f"{deck.get('name')} has no list")
+    return {"id": hit["id"], "name": deck.get("name", ""), "legend": deck.get("legend"), "version": deck.get("version"),
+            "n": v.get("n"), "code": v.get("code", ""), "ids": v.get("ids", ""), "list": v.get("list", "")}
+
+
+def tts_match(db, user, b):
+    mid = b.get("id")
+    if not isinstance(mid, str) or not 0 < len(mid) <= 128:
+        raise HTTPError(400, "a game needs an id (the same one when sent again)")
+    data = {k: v for k, v in b.items() if k in TTS_MATCH_FIELDS}
+    if data.get("result") not in (None, "win", "loss", "draw"):
+        raise HTTPError(400, "result is win, loss or draw")
+    if data.get("deck"):
+        deck = live(db, user, "deck").get(data["deck"])
+        if deck is None:
+            data.pop("deck")
+        elif not data.get("deckver"):
+            data["deckver"] = deck.get("version")
+    old = db.one("select data from records where user = ? and kind = 'match' and id = ? and not deleted", user, mid)
+    old = json.loads(old["data"]) if old else {}
+    # what was written in the app stays: notes, tags
+    merged = {"tags": [], "notes": "", **old, **data, "source": "tts", "needsNotes": not (old.get("notes") or "").strip()}
+    merged.setdefault("date", time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
+    db.sync(user, 0, [{"kind": "match", "id": mid, "data": merged, "updated": now_ms(), "deleted": False}])
+    return {"ok": True, "id": mid}
+
+
 class Tx:
     def __init__(self, c):
         self.c = c
@@ -214,6 +283,9 @@ class App:
         self.route("GET", r"/tokens", self.tokens, {"app"})
         self.route("POST", r"/tokens", self.make_token, {"app"})
         self.route("DELETE", r"/tokens/(\d+)", self.drop_token, {"app"})
+        self.route("GET", r"/tts/decks", lambda req, tok: tts_decks(self.db, tok["user"]), {"tts", "app"})
+        self.route("GET", r"/tts/deck/(.+)", lambda req, tok, key: tts_deck(self.db, tok["user"], key), {"tts", "app"})
+        self.route("POST", r"/tts/match", lambda req, tok: tts_match(self.db, tok["user"], req.json()), {"tts", "app"})
 
     def route(self, method, path, fn, scopes):
         self.routes.append((method, re.compile(path + "$"), fn, scopes))
