@@ -406,7 +406,7 @@ def main():
 
     if a.cmd == "serve":
         srv = make_server(a.db, a.host, a.port, proxy=a.proxy)
-        print(f"rb sync on {a.host}:{a.port}, {a.db}", file=sys.stderr)
+        print(f"rb sync on {a.host}:{srv.server_address[1]}, {a.db}", file=sys.stderr, flush=True)
         try:
             srv.serve_forever()
         except KeyboardInterrupt:
