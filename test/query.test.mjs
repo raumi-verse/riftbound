@@ -176,3 +176,24 @@ test("export", () => {
   const tricky = exportList({ sections: [{ rows: [{ ...res("t:battlefield s:ogn").sections[0].rows[0], name: 'A "B", C' }] }] }, "csv");
   assert.match(tricky, /^.*\r\n"A ""B"", C",/);
 });
+
+test("the collection: own, ownp, is:owned, is:missing, sort:own, CSV", () => {
+  const CARDS = Q("CARDS"), exportList = Q("exportList");
+  const names = (q) => [...new Set(res(q).sections.flatMap((s) => s.rows.map((r) => r.name)))];
+  const jinx = CARDS.find((c) => c.name === "Jinx, Demolitionist"), alt = jinx.printings.find((p) => p.alt) || jinx.printings[1];
+  ctx.OWNED = new Map([[jinx.printings[0].id, 2], [alt.id, 1]]);
+  try {
+    assert.deepEqual(names("is:owned"), ["Jinx, Demolitionist"]);
+    assert.deepEqual(names("own>=3"), ["Jinx, Demolitionist"]); // 2 + 1 in different printings
+    assert.deepEqual(names("ownp>=2"), ["Jinx, Demolitionist"]);
+    assert.deepEqual(names("ownp>=3"), []);
+    assert.ok(run("is:missing").count > 1000);
+    assert.equal(run("is:missing champ:jinx").count, run("champ:jinx").count - 1);
+    assert.equal(run("t:unit sort:-own").sections[0].rows[0].name, "Jinx, Demolitionist");
+    assert.match(run("own>").errors[0], /needs a number/);
+    const csv = exportList(run("ownp>=1 show:printings"), "csv").trim().split("\r\n");
+    assert.ok(csv[0].endsWith(",own"));
+    assert.deepEqual(csv.slice(1).map((l) => +l.split(",").at(-1)).sort(), [1, 2]);
+  } finally { ctx.OWNED = undefined; }
+  assert.equal(run("is:owned").count, 0); // no collection: nothing owned
+});

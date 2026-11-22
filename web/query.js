@@ -30,6 +30,8 @@ const FIELDS = {
   id: "id",
   is: "is",
   for: "for", legend: "for",
+  own: "own", have: "own",
+  ownp: "ownp",
 };
 const DIRECTIVES = ["sort", "group", "order", "show", "view"];
 // has: filters groups (needs group:): keep a group if one of its cards matches. Short forms below,
@@ -50,7 +52,14 @@ function playable(r, l) {
   return r.domains.every((d) => l.domains.includes(d));
 }
 
+// The collection: window.OWNED is a Map printing id -> copies (app.js fills it from the store). own counts the card
+// in any printing (own>=3: a playset), ownp the printing itself (ownp>=1 is:alt: the alt arts you have).
+const ownedPrint = (id) => (window.OWNED && window.OWNED.get(id)) || 0;
+const ownedCard = (r) => r.printings.reduce((n, p) => n + ownedPrint(p.id), 0);
+
 const IS = {
+  owned: (r) => ownedCard(r) > 0,
+  missing: (r) => ownedCard(r) === 0,
   alt: (r) => r.prints.some((p) => p.alt),
   overnumbered: (r) => r.prints.some((p) => p.overnumbered),
   promo: (r) => r.prints.some((p) => p.promo),
@@ -64,7 +73,7 @@ const IS = {
   banned: (r) => !!r.banned,
   landscape: (r) => r.landscape,
 };
-const NUMERIC = new Set(["energy", "might", "power", "num"]);
+const NUMERIC = new Set(["energy", "might", "power", "num", "own", "ownp"]);
 const RANGE = /^(\d+)(?:\.\.|-)(\d+)$/; // e:2..4, e:2-4
 const ID_RANGE = /^([a-z]+)-(\d+)\.\.(?:([a-z]+)-)?(\d+)$/; // id:ogn-270..280, id:ogn-270..ogn-280
 // a number value the op can take: 3, 2.5, 7+ and ranges only with : = !=
@@ -298,6 +307,8 @@ function test(node, r) {
   }
   if (f === "energy" || f === "might" || f === "power") return numMatch(r[f], op, v);
   if (f === "num") return r.prints.some((p) => numMatch(p.num, op, v));
+  if (f === "own") return numMatch(ownedCard(r), op, v);
+  if (f === "ownp") return r.prints.some((p) => numMatch(ownedPrint(p.id), op, v));
   if (f === "id") return idMatch(r, op, v);
   if (f === "domain") return domainMatch(r, op, v);
   if (f === "is") { const fn = IS[v.s]; return fn ? (op === "!=" ? !fn(r) : fn(r)) : false; }
@@ -320,6 +331,8 @@ const SORT_KEYS = {
   num: (r) => [SET_ORDER.indexOf(r.p.set), r.p.num ?? 0],
   champion: (r) => r.champion ? r.champion.toLowerCase() : "￿",
   role: (r) => r.role ?? 9,
+  own: (r) => ownedCard(r),
+  ownp: (r) => ownedPrint(r.p.id),
 };
 
 function cmp(a, b) {
@@ -440,7 +453,7 @@ function stats(list) {
 // exportList(run(q), kind): the shown rows in page order. names: each name once; ids: the shown printings;
 // link: a query for exactly those printings; csv: a spreadsheet, energy and might only where the card has them.
 
-const CSV_COLS = ["name", "id", "set", "num", "rarity", "type", "supertype", "domains", "energy", "might", "power", "champion", "artist"];
+const CSV_COLS = ["name", "id", "set", "num", "rarity", "type", "supertype", "domains", "energy", "might", "power", "champion", "artist", "own"];
 const csvCell = (x) => (x = x == null ? "" : String(x), /[",\n]/.test(x) ? `"${x.replace(/"/g, '""')}"` : x);
 function exportList(res, kind) {
   const rows = res.sections.flatMap((s) => s.rows);
@@ -448,7 +461,7 @@ function exportList(res, kind) {
   if (kind === "ids") return rows.map((r) => r.p.id).join("\n");
   if (kind === "link") return [`id=${rows.map((r) => r.p.id).join("|")}`, ...Object.entries(res.dirs).map(([k, v]) => `${k}:${v}`)].join(" ");
   return [CSV_COLS, ...rows.map((r) => [r.name, r.p.id, r.p.set, r.p.num, r.p.rarity, r.type, r.supertype, r.domains.join("+"),
-    HAS_STAT.energy(r) ? r.energy : null, HAS_STAT.might(r) ? r.might : null, r.power, r.champion, r.p.artist])]
+    HAS_STAT.energy(r) ? r.energy : null, HAS_STAT.might(r) ? r.might : null, r.power, r.champion, r.p.artist, ownedPrint(r.p.id)])]
     .map((cells) => cells.map(csvCell).join(",")).join("\r\n") + "\r\n";
 }
 const uniq0 = (xs) => [...new Set(xs)]; // in order
@@ -495,6 +508,7 @@ const quoteVal = (v) => /[\s|]/.test(v) ? `"${v}"` : v;
 const FIELD_HINTS = [
   ["t:", "type"], ["st:", "supertype"], ["d:", "domain"], ["e:", "energy"], ["m:", "might"], ["p:", "power"],
   ["champ:", "champion"], ["for:", "playable with a legend"], ["tag:", "tag"], ["o:", "rules text"], ["kw:", "keyword"],
+  ["own:", "copies you have (any printing)"], ["ownp:", "copies of this printing"],
   ["r:", "rarity"], ["set:", "set"], ["a:", "artist"], ["f:", "flavour text"], ["n:", "name"], ["num:", "collector number"], ["id:", "printing id"],
   ["is:", "card property"], ["has:", "groups with such a card"], ["sort:", "sort the cards"], ["group:", "group by"],
   ["order:", "order the groups"], ["show:", "show:printings"], ["view:", "grid or list"],
@@ -515,7 +529,7 @@ const VALUES = {
   artist: lazy(() => uniq(CARDS.flatMap((c) => c.printings.map((p) => p.artist))).map((a) => [a])),
   name: lazy(() => uniq(CARDS.map((c) => c.name)).map((n) => [n])),
   has: () => Object.keys(HAS_SHORT).filter((k) => !k.endsWith("s")).map((k) => [k]),
-  sort: () => ["name", "energy", "might", "power", "type", "domain", "rarity", "set", "num", "champion", "role"].map((k) => [k]),
+  sort: () => ["name", "energy", "might", "power", "type", "domain", "rarity", "set", "num", "champion", "role", "own", "ownp"].map((k) => [k]),
   order: () => ["name", "count", "energy", "might", "domain", "type", "rarity", "set"].map((k) => [k]),
   group: () => Object.keys(GROUPS).map((k) => [k]),
   show: () => [["printings"]],

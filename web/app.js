@@ -382,6 +382,15 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "/" && document.activeElement !== $("#q")) { e.preventDefault(); $("#q").focus(); $("#q").select(); }
 });
 
+// the collection (store.js) for own:, ownp:, is:owned, is:missing and sort:own, kept up to date
+function loadOwned() { window.OWNED = new Map(STORE.all("coll").filter((r) => r.data.n > 0).map((r) => [r.id, r.data.n])); }
+loadOwned();
+STORE.on((kinds) => {
+  if (!kinds.has("coll")) return;
+  loadOwned();
+  if (/\bownp?[:=<>!]|is:(owned|missing)|sort:\S*own|order:\S*own/i.test($("#q").value)) render();
+});
+
 buildFilters();
 // on a phone the filters start folded away, unless the Filters button opened them before
 const filtersDefault = S.showFilters === false || matchMedia("(max-width: 700px)").matches ? "off" : "on";
