@@ -39,9 +39,11 @@ jobs:
             git push
           fi
 
-      # the query engine on the (just synced) card data; a failure stops the deploy
+      # the page's code on the (just synced) card data, and the sync server; a failure stops the deploy
       - name: Test
-        run: node --test test/*.test.mjs
+        run: |
+          node --test test/*.test.mjs
+          python3 -m unittest discover test
 
       # rb.raumi.dev/search/ is the browser; the root only forwards there (room for other pages later)
       - name: Lay out the site
