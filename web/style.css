@@ -176,6 +176,51 @@ nav.pages a { color: var(--subtext); padding: .45rem .6rem; border-radius: 6px; 
 nav.pages a:hover { color: var(--text); background: var(--surface0); text-decoration: none; }
 nav.pages a[aria-current] { color: var(--accent); }
 
+/* collection mode */
+#collect[aria-pressed="true"] { background: color-mix(in srgb, var(--accent) 35%, var(--surface0)); }
+#collect-bar { display: none; flex-wrap: wrap; gap: .5rem 1rem; align-items: center; padding: .5rem 1rem; background: var(--mantle); border-bottom: 1px solid var(--surface0); }
+body[data-collect] #collect-bar { display: flex; }
+#entry { flex: 0 1 30rem; min-width: 12rem; font: 14px ui-monospace, monospace; padding: .45rem .7rem; background: var(--crust); color: var(--text); border: 1px solid var(--surface1); border-radius: 6px; }
+#entry:focus { outline: none; border-color: var(--accent); }
+#entry-out { flex: 1; display: flex; gap: .6rem; align-items: center; min-height: 2.6rem; min-width: 12rem; }
+#entry-out img { height: 2.6rem; border-radius: 3px; }
+#entry-out .err { color: var(--red); }
+#entry-out small, #own-total { color: var(--overlay); }
+#collect-bar button, dialog.imp button, dialog.imp select { font: inherit; background: var(--surface0); color: var(--text); border: 0; border-radius: 6px; padding: .4rem .7rem; cursor: pointer; }
+.own { display: inline-flex; align-items: center; background: #000c; color: #fff; border-radius: 99px; font-size: 13px; user-select: none; }
+.own [data-d] { width: 1.9rem; height: 1.9rem; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; border-radius: 99px; font-size: 16px; }
+.own [data-d]:hover { background: var(--accent); color: var(--crust); }
+.own b { min-width: 1.2rem; text-align: center; font-variant-numeric: tabular-nums; }
+.own.none b { color: var(--overlay); }
+.card .own { position: absolute; left: 50%; bottom: 5%; transform: translateX(-50%); }
+.card.unowned img { opacity: .4; filter: grayscale(.6); }
+.card.unowned:hover img { opacity: .8; }
+.list .own { margin-right: .5rem; background: var(--surface0); color: var(--text); }
+.list .own [data-d] { width: 1.6rem; height: 1.6rem; }
+dialog .prw { display: flex; gap: .4rem; align-items: center; }
+dialog .prw .pr { flex: 1; }
+dialog .prw .own { background: var(--surface0); color: var(--text); }
+dialog.imp { width: min(720px, 95vw); }
+dialog.imp[open] { display: block; }
+dialog.imp h2 { display: flex; justify-content: space-between; }
+dialog.imp .close { background: none; color: var(--overlay); }
+dialog.imp textarea { width: 100%; font: 13px/1.4 ui-monospace, monospace; padding: .5rem .7rem; background: var(--crust); color: var(--text); border: 1px solid var(--surface1); border-radius: 6px; }
+dialog.imp .row { display: flex; gap: .6rem; margin: .5rem 0; }
+dialog.imp .apply { background: color-mix(in srgb, var(--accent) 35%, var(--surface0)); }
+dialog.imp .apply:disabled { opacity: .5; cursor: default; }
+dialog.imp .note, dialog.imp small { color: var(--overlay); font-size: 13px; }
+dialog.imp .err { color: var(--red); }
+#entry-out:empty { display: none; }
+#own-total { margin-left: auto; }
+@media (max-width: 700px) {
+  #count { overflow: hidden; text-overflow: ellipsis; }
+  #collect-bar { padding: .4rem .5rem; gap: .4rem .6rem; }
+  #entry { flex: 1 1 100%; }
+  #entry-out { flex: 1 1 100%; order: 3; }
+  #own-total { margin-left: 0; flex: 1; }
+  .card .own [data-d] { width: 2.3rem; height: 2.3rem; }
+}
+
 /* the account button and dialog (account.js) */
 #account { margin-left: auto; display: flex; align-items: center; gap: .4rem; white-space: nowrap; }
 .dot { display: inline-block; width: .55rem; height: .55rem; border-radius: 50%; background: var(--overlay); flex: none; }
@@ -200,7 +245,8 @@ dialog.acct details input { width: 100%; margin-top: .3rem; }
 dialog.acct button { cursor: pointer; border-color: transparent; }
 dialog.acct form button, dialog.acct .sync { background: color-mix(in srgb, var(--accent) 35%, var(--surface0)); }
 dialog.acct code.tok { word-break: break-all; padding: .3rem .5rem; user-select: all; }
-@media (max-width: 700px) { #account .who { display: none; } dialog.acct { margin: auto; border-radius: 10px; } }
+@media (max-width: 700px) { header nav.pages { order: -2; } #account { order: -1; } header:has(#q) nav.pages { flex: 1; }
+  #account .who { display: none; } dialog.acct { margin: auto; border-radius: 10px; } }
 
 /* goldfish */
 .gf { max-width: 1000px; margin: 0 auto; padding-top: 1rem; }

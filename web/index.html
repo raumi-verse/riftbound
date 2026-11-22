@@ -16,6 +16,7 @@
   <input id="q" type="search" placeholder='Search…  e.g. group:champion   d:fury e<=3 kw:accelerate   o:"when you conquer" sort:-might' autofocus spellcheck="false" autocomplete="off">
   <ul id="suggest" role="listbox" hidden></ul>
   <span id="count"></span>
+  <button id="collect" title="Collection mode: every printing with − count +, quick entry, paste a list" aria-pressed="false">Collection</button>
   <button id="filter-toggle" title="Show / hide the filters">Filters</button>
   <button id="view" title="Grid / list">☰</button>
   <details id="export">
@@ -59,6 +60,12 @@
     </div>
   </details>
 </header>
+<div id="collect-bar">
+  <input id="entry" type="text" placeholder="Add: ogn 42 · OGN-042a x2 · 3x sfd 7 · 42 (same set) · -ogn 42 removes" spellcheck="false" autocomplete="off" enterkeyhint="done">
+  <div id="entry-out"></div>
+  <span id="own-total"></span>
+  <button type="button" id="import-open" title="Paste a list, a CSV or a deck code">Paste list…</button>
+</div>
 <div id="filters"></div>
 <div id="chips"></div>
 <main id="results"></main>
@@ -67,12 +74,22 @@
   <p>Card data and images via <a href="https://piltoverarchive.com">Piltover Archive</a>. Source on <a href="https://github.com/raumi-verse/riftbound">GitHub</a>.</p>
   <p class="legal">Riftbound card search isn't endorsed by Riot Games and doesn't reflect the views or opinions of Riot Games or anyone officially involved in producing or managing Riot Games properties. Riot Games, Riftbound, League of Legends and all associated properties are trademarks or registered trademarks of Riot Games, Inc.</p>
 </footer>
+<dialog id="import" class="imp">
+  <h2>Paste a list <button type="button" class="close" aria-label="Close">✕</button></h2>
+  <p class="note">One per line: <code>ogn 42 3</code>, <code>OGN-042a</code>, <code>3 Jinx, Demolitionist</code> (its first printing), <code>1 Jinx, Demolitionist (OGN-030a)</code>;
+    a CSV with an <code>id</code> column and <code>own</code> or <code>count</code> (this page's Export); or a deck code (one of each card in it).</p>
+  <textarea rows="8" spellcheck="false" autocomplete="off"></textarea>
+  <div class="row"><select><option value="add">add to what I have</option><option value="set">set to these counts</option></select><button type="button" class="apply" disabled>Apply</button></div>
+  <div class="pv"></div>
+</dialog>
 <dialog id="detail"><div class="big"></div><div class="info"></div></dialog>
 <script src="settings.js"></script>
 <script src="cards.js"></script>
 <script src="store.js"></script>
 <script src="sync.js"></script>
 <script src="query.js"></script>
+<script src="deck.js"></script>
+<script src="collection.js"></script>
 <script src="app.js"></script>
 <script src="account.js"></script>
 </body>

@@ -6,6 +6,8 @@
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 let view = localStorage.getItem("rb-view") || S.view;
+// collection mode: every printing on its own with − count + (the counts are in the store, see collection.js)
+let collecting = localStorage.getItem("rb-collect") === "on";
 
 // the game's symbols, in web/icons/ (sync.py downloads them)
 const icon = (file, alt, cls = "") => `<img class="ic${cls ? " " + cls : ""}" src="icons/${file}" alt="${esc(alt)}" title="${esc(alt)}">`;
@@ -68,11 +70,16 @@ const qlink = (q, text) => `<a href="#${encodeURIComponent(q)}">${esc(text)}</a>
 const quote = (s) => /\s/.test(s) ? `"${s}"` : s;
 
 function imgSrc(r) { return r.p.img || r.printings.find((p) => p.img)?.img; }
+// − n + for one printing; the buttons are spans because they sit inside the card's button
+const ownCtl = (id) => {
+  const n = COLL.n(id);
+  return `<span class="own${n ? "" : " none"}" data-own="${esc(id)}"><span role="button" tabindex="-1" data-d="-1" title="One less">−</span><b>${n}</b><span role="button" tabindex="-1" data-d="1" title="One more (hover and press +)">+</span></span>`;
+};
 
 function gridSection(rows) {
   return `<div class="grid">${rows.map((r, i) => {
     const src = imgSrc(r);
-    return `<button class="card${r.landscape ? " land" : ""}" data-i="${i}" title="${esc(r.name)}">${src ? `<img loading="lazy" src="${esc(src)}" alt="${esc(r.name)}">` : `<span class="noimg">${esc(r.name)}</span>`}${r.printings.length > 1 && !r._exp ? `<span class="nprint">${r.printings.length}</span>` : ""}</button>`;
+    return `<button class="card${r.landscape ? " land" : ""}${collecting && !COLL.n(r.p.id) ? " unowned" : ""}" data-i="${i}" data-id="${esc(r.p.id)}" title="${esc(r.name)}">${src ? `<img loading="lazy" src="${esc(src)}" alt="${esc(r.name)}">` : `<span class="noimg">${esc(r.name)}</span>`}${r.printings.length > 1 && !r._exp ? `<span class="nprint">${r.printings.length}</span>` : ""}${collecting ? ownCtl(r.p.id) : ""}</button>`;
   }).join("")}</div>`;
 }
 
@@ -81,8 +88,8 @@ const COLS = [
   ["energy", "E"], ["might", ICONS.might()], ["power", ICONS.rune()], ["rarity", "Rarity"], ["set", "Set"], [null, "Text"],
 ];
 function listSection(rows) {
-  return `<table class="list"><thead><tr>${COLS.map(([k, l]) => `<th${k ? ` data-sort="${k}" title="click: sort by this, shift-click: add as next key"` : ""}>${l}</th>`).join("")}</tr></thead><tbody>${rows.map((r, i) => `<tr data-i="${i}">
-    <td class="nm">${esc(r.name)}${r.role != null ? ` <small class="role">${["L", "C", "S", ""][r.role]}</small>` : ""}</td>
+  return `<table class="list"><thead><tr>${COLS.map(([k, l]) => `<th${k ? ` data-sort="${k}" title="click: sort by this, shift-click: add as next key"` : ""}>${l}</th>`).join("")}</tr></thead><tbody>${rows.map((r, i) => `<tr data-i="${i}" data-id="${esc(r.p.id)}">
+    <td class="nm">${collecting ? ownCtl(r.p.id) : ""}${esc(r.name)}${r.role != null ? ` <small class="role">${["L", "C", "S", ""][r.role]}</small>` : ""}</td>
     <td>${esc(r.champion || "")}</td>
     <td>${ICONS.type(r.type)} ${esc(r.type)}${r.supertype ? ` <small>${esc(r.supertype)}</small>` : ""}</td>
     <td>${dots(r.domains)}</td>
@@ -122,7 +129,8 @@ let current = null;
 function render() {
   const q = $("#q").value;
   syncFilters(q);
-  const res = (current = run(q, view));
+  // collecting, each printing is its own entry (unless the query says show:)
+  const res = (current = run(collecting && !/(^|\s)show:/.test(q) ? `${q} show:printings` : q, view));
   $("#chips").innerHTML = chips(res);
   $("#count").textContent = `${res.count} ${res.dirs.show?.startsWith("print") ? "printings" : "cards"}`;
   document.body.dataset.view = res.view;
@@ -176,7 +184,7 @@ function showCard(r, pos) {
     ${r.type === "Legend" ? `<p class="tags">${qlink(`for:"${r.name}" group:type`, "Everything this legend's deck may play")}</p>` : ""}
     ${sameChampion(r)}
     <h3>Printings</h3>
-    <div class="prints">${r.printings.map((p) => `<button class="pr" data-id="${esc(p.id + p.kind)}">${ICONS.rarity(p.rarity)} ${esc(p.set)} ${p.num ?? ""} · ${esc(p.rarity)}${p.kind ? ` · ${esc(p.kind)}` : ""}${p.artist ? `<small>${esc(p.artist)}</small>` : ""}</button>`).join("")}</div>`;
+    <div class="prints">${r.printings.map((p) => `<div class="prw"><button class="pr" data-id="${esc(p.id + p.kind)}">${ICONS.rarity(p.rarity)} ${esc(p.set)} ${p.num ?? ""} · ${esc(p.rarity)}${p.kind ? ` · ${esc(p.kind)}` : ""}${p.artist ? `<small>${esc(p.artist)}</small>` : ""}</button>${ownCtl(p.id)}</div>`).join("")}</div>`;
   d.querySelectorAll(".pr").forEach((b, i) => (b.onclick = () => show(r.printings[i])));
   d.querySelectorAll(".same button").forEach((b) => (b.onclick = () => showCard(FOLDED.find((c) => c.id === b.dataset.id), "")));
   d.querySelectorAll("[data-step]").forEach((b) => (b.onclick = () => step(Number(b.dataset.step))));
@@ -382,6 +390,93 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "/" && document.activeElement !== $("#q")) { e.preventDefault(); $("#q").focus(); $("#q").select(); }
 });
 
+// ---------- the collection ----------
+
+// the counts on the page follow the store (this tab, another tab, another device)
+function showCounts() {
+  document.querySelectorAll("[data-own]").forEach((el) => {
+    const n = COLL.n(el.dataset.own);
+    el.querySelector("b").textContent = n;
+    el.classList.toggle("none", !n);
+    el.closest(".card")?.classList.toggle("unowned", collecting && !n);
+  });
+  const all = STORE.all("coll");
+  $("#own-total").textContent = `${all.reduce((n, r) => n + r.data.n, 0)} cards · ${new Set(all.map((r) => PRINTS.get(r.id.toUpperCase())?.card.id)).size} different`;
+}
+function setCollecting(on) {
+  collecting = on;
+  localStorage.setItem("rb-collect", on ? "on" : "off");
+  document.body.toggleAttribute("data-collect", on);
+  $("#collect").setAttribute("aria-pressed", on);
+  render();
+  showCounts();
+}
+$("#collect").addEventListener("click", () => setCollecting(!collecting));
+
+// − / + on a tile, a list row or a printing in the dialog
+document.addEventListener("click", (e) => {
+  const b = e.target.closest("[data-own] [data-d]");
+  if (!b) return;
+  e.preventDefault(); e.stopPropagation();
+  COLL.add(b.closest("[data-own]").dataset.own, Number(b.dataset.d));
+}, true);
+// hover a card and press + or −
+let hovered = null;
+$("#results").addEventListener("mouseover", (e) => { hovered = e.target.closest("[data-id]")?.dataset.id ?? null; });
+$("#results").addEventListener("mouseleave", () => { hovered = null; });
+document.addEventListener("keydown", (e) => {
+  if (!collecting || !hovered || e.target.closest("input, textarea, select") || e.ctrlKey || e.metaKey || e.altKey) return;
+  const d = { "+": 1, "=": 1, "-": -1, "_": -1 }[e.key];
+  if (d) { e.preventDefault(); COLL.add(hovered, d); }
+});
+
+// quick entry: one printing per Enter; a number alone reuses the last set
+let lastSet = null, lastEntry = null;
+function entryResult(e) {
+  const out = $("#entry-out");
+  if (e.error != null) { out.innerHTML = e.error ? `<span class="err">${esc(e.error)}</span>` : ""; return; }
+  const n = COLL.add(e.id, e.n);
+  lastSet = e.set;
+  lastEntry = e;
+  const src = e.p.img || imgSrc({ p: e.p, printings: e.card.printings });
+  out.innerHTML = `${src ? `<img src="${esc(src)}" alt="">` : ""}<span><b>${esc(e.card.name)}</b> <small>${esc(e.id)}${e.p.kind ? ` · ${esc(e.p.kind)}` : ""}</small><br>
+    ${e.n > 0 ? "+" : ""}${e.n} → you have <b>${n}</b></span><button type="button" class="undo">Undo</button>`;
+  out.querySelector(".undo").onclick = () => { COLL.add(lastEntry.id, -lastEntry.n); out.innerHTML = `<small>undone: ${esc(e.card.name)}</small>`; };
+}
+$("#entry").addEventListener("keydown", (e) => {
+  if (e.key !== "Enter") return;
+  e.preventDefault();
+  entryResult(parseEntry(e.target.value, lastSet));
+  if ($("#entry-out .err") == null) e.target.value = "";
+});
+
+// pasting a list
+const imp = $("#import");
+let pasted = null;
+$("#import-open").addEventListener("click", () => { imp.showModal(); imp.querySelector("textarea").focus(); });
+imp.querySelector(".close").onclick = () => imp.close();
+imp.querySelector("textarea").addEventListener("input", () => { clearTimeout(imp.t); imp.t = setTimeout(preview, 250); });
+imp.querySelector("select").addEventListener("change", preview);
+function preview() {
+  pasted = parseBulk(imp.querySelector("textarea").value);
+  const set = imp.querySelector("select").value === "set";
+  const total = pasted.items.reduce((n, i) => n + i.n, 0);
+  imp.querySelector(".pv").innerHTML = (pasted.problems.length ? `<ul class="err">${pasted.problems.slice(0, 20).map((p) => `<li>${esc(p)}</li>`).join("")}${pasted.problems.length > 20 ? `<li>… ${pasted.problems.length - 20} more</li>` : ""}</ul>` : "")
+    + (pasted.items.length ? `<p>${pasted.items.length} printings, ${total} cards</p><table class="gf-table">${pasted.items.map((i) => {
+      const now = COLL.n(i.id), after = set ? i.n : now + i.n;
+      return `<tr><td class="n">${set ? "" : "+"}${i.n}</td><td>${esc(i.card.name)} <small>${esc(i.id)}</small></td><td class="n"><small>${now} → ${after}</small></td></tr>`;
+    }).join("")}</table>` : "");
+  imp.querySelector(".apply").disabled = !pasted.items.length;
+}
+imp.querySelector(".apply").onclick = () => {
+  if (!pasted?.items.length) return;
+  COLL.apply(pasted.items, imp.querySelector("select").value);
+  imp.close();
+  imp.querySelector("textarea").value = "";
+  $("#entry-out").innerHTML = `<span>Added ${pasted.items.length} printings from the list.</span>`;
+  pasted = null;
+};
+
 // the collection (store.js) for own:, ownp:, is:owned, is:missing and sort:own, kept up to date
 function loadOwned() { window.OWNED = new Map(STORE.all("coll").filter((r) => r.data.n > 0).map((r) => [r.id, r.data.n])); }
 loadOwned();
@@ -389,6 +484,7 @@ STORE.on((kinds) => {
   if (!kinds.has("coll")) return;
   loadOwned();
   if (/\bownp?[:=<>!]|is:(owned|missing)|sort:\S*own|order:\S*own/i.test($("#q").value)) render();
+  showCounts();
 });
 
 buildFilters();
@@ -397,7 +493,10 @@ const filtersDefault = S.showFilters === false || matchMedia("(max-width: 700px)
 if ((localStorage.getItem("rb-filters") || filtersDefault) === "off") document.body.setAttribute("data-nofilters", "");
 $("#synced").textContent = `${CARDS.length} cards · synced ${synced.slice(0, 10)}`;
 $("#q").value = decodeURIComponent(location.hash.slice(1));
+document.body.toggleAttribute("data-collect", collecting);
+$("#collect").setAttribute("aria-pressed", collecting);
 render();
+showCounts();
 
 // offline use on the website (sw.js); file:// has no service workers
 if ("serviceWorker" in navigator && location.protocol.startsWith("http")) navigator.serviceWorker.register("sw.js");
