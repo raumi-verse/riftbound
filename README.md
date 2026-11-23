@@ -119,7 +119,7 @@ python3 server.py --db rb.sqlite adduser NAME     # asks for a password; there i
 python3 server.py --db rb.sqlite serve --port 8080 [--proxy]
 ```
 
-The page talks to `syncServer` in `web/settings.js` (https://api.rb.raumi.dev), or the one typed in the login dialog. CORS
+The page talks to `syncServer` in `web/settings.js` (https://rb-api.raumi.dev), or the one typed in the login dialog. CORS
 allows `RB_ORIGINS` (default https://rb.raumi.dev), localhost and pages opened from disk.
 
 ## Tabletop Simulator

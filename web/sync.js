@@ -9,7 +9,7 @@
 
 const SYNC = (() => {
   const KEY = "rb-sync"; // {server, token, name, last}
-  const DEFAULT_SERVER = (window.SETTINGS && window.SETTINGS.syncServer) || "https://api.rb.raumi.dev";
+  const DEFAULT_SERVER = (window.SETTINGS && window.SETTINGS.syncServer) || "https://rb-api.raumi.dev";
   const DELAY = 2000;
   const ls = (() => { try { return window.localStorage; } catch { return null; } })();
   let conf = (() => { try { return JSON.parse(ls?.getItem(KEY)) || {}; } catch { return {}; } })();
