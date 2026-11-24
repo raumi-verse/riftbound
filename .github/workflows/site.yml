@@ -31,7 +31,9 @@ jobs:
         if: github.event_name != 'push'
         run: |
           python3 sync.py
-          git add web/cards.js web/icons
+          # the scan's art index; without it new cards are still read by their number
+          (pip install -q pillow numpy && python3 art.py) || echo "::warning::art.py failed"
+          git add web/cards.js web/icons web/art.js
           if ! git diff --cached --quiet; then
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"

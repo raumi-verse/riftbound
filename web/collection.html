@@ -24,6 +24,7 @@
     <input id="name" type="search" placeholder="Find a card in every set" aria-label="Find a card" autocomplete="off" spellcheck="false">
     <form id="show-form"><fieldset class='seg'><legend class='sr'>Show</legend><div><label><input type='radio' name='show' value='all'><span>All</span></label><label><input type='radio' name='show' value='owned'><span>Owned</span></label><label><input type='radio' name='show' value='missing'><span>Missing</span></label></div></fieldset></form>
   </div>
+  <form id="as-form" class="as"><span>+ adds</span><fieldset class="seg"><legend class="sr">Language</legend><div><label><input type="radio" name="lang" value="en"><span>English</span></label><label><input type="radio" name="lang" value="zh"><span>Chinese</span></label></div></fieldset><label class="chip-check"><input type="checkbox" name="foil"><span>✦ Foil</span></label></form>
   <div id="results"></div>
 </main>
 <footer>
@@ -34,6 +35,7 @@
 <dialog id="scan" class="scan">
   <div class="cam"><video playsinline muted></video><div class="guide"><span class="line"></span></div><p class="hint"></p>
     <div class="tools"><button type="button" class="torch" hidden title="Light" aria-label="Light">💡</button><label class="photo" title="Read a photo instead">📷<input type="file" accept="image/*" hidden></label><button type="button" class="close" title="Close">✕</button></div></div>
+  <form class="as"><fieldset class="seg"><legend class="sr">Language of the cards being scanned</legend><div><label><input type="radio" name="lang" value="en"><span>English</span></label><label><input type="radio" name="lang" value="zh"><span>Chinese</span></label></div></fieldset><label class="chip-check"><input type="checkbox" name="foil"><span>✦ Foil</span></label></form>
   <form class="manual"><input class="mono" placeholder="or type: ogn 42, OGN-042a, 42 (same set)" spellcheck="false" autocomplete="off" enterkeyhint="done"><button class="btn tonal">Add</button></form>
   <div class="row"><b class="count"></b><button type="button" class="btn text clear">Clear</button><button type="button" class="btn filled addall" disabled>Add all</button></div>
   <ul class="tally"></ul>

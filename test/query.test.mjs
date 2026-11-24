@@ -192,8 +192,8 @@ test("the collection: own, ownp, is:owned, is:missing, sort:own, CSV", () => {
     assert.equal(run("t:unit sort:-own").sections[0].rows[0].name, "Jinx, Demolitionist");
     assert.match(run("own>").errors[0], /needs a number/);
     const csv = exportList(run("ownp>=1 show:printings"), "csv").trim().split("\r\n");
-    assert.ok(csv[0].endsWith(",own"));
-    assert.deepEqual(csv.slice(1).map((l) => +l.split(",").at(-1)).sort(), [1, 2]);
+    assert.ok(csv[0].endsWith(",own,foil,zh,zh-foil"));
+    assert.deepEqual(csv.slice(1).map((l) => +l.split(",").at(-4)).sort(), [1, 2]);
   } finally { ctx.OWNED = undefined; }
   assert.equal(run("is:owned").count, 0); // no collection: nothing owned
 });

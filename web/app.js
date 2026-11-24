@@ -277,12 +277,13 @@ document.addEventListener("keydown", (e) => {
 // ---------- the collection ----------
 
 // the collection (store.js) for own:, ownp:, is:owned, is:missing and sort:own, kept up to date
-function loadOwned() { window.OWNED = new Map(STORE.all("coll").filter((r) => r.data.n > 0).map((r) => [r.id, r.data.n])); }
+function loadOwned() { window.OWNED = new Map(STORE.all("coll").filter((r) => r.data.n > 0).map((r) => [r.id, r.data.n]));
+  window.OWNED_X = new Map(STORE.all("coll").filter((r) => r.data.x).map((r) => [r.id, r.data.x])); }
 loadOwned();
 STORE.on((kinds) => {
   if (!kinds.has("coll")) return;
   loadOwned();
-  if (/\bownp?[:=<>!]|is:(owned|missing)|sort:\S*own|order:\S*own/i.test($("#q").value)) render();
+  if (/\bownp?[:=<>!]|is:(owned|missing|foil|chinese)|sort:\S*own|order:\S*own/i.test($("#q").value)) render();
   else document.querySelectorAll("#results .card").forEach((el) => {
     const r = current.sections[el.closest("[data-s]").dataset.s].rows[el.dataset.i], b = $(".have", el), n = haveN(r);
     if (b) b.remove();

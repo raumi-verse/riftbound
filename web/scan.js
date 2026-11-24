@@ -1,7 +1,7 @@
 "use strict";
-// Scanning cards with the camera. The collector line at the bottom left ("OGN • 030a/298") names the printing; the
-// name is read too, to confirm it or to find the card when the number can't be read. OCR is Tesseract.js, loaded
-// on first use (the service worker keeps it for offline use). Needs query.js and collection.js (PRINTS).
+// Scanning cards with the camera. The art is compared with every printing's first, in any language; only when that
+// leaves a doubt is the collector line at the bottom left ("OGN • 030a/298") or the name read, by Tesseract.js, loaded
+// on first use (the service worker keeps it for offline use). Needs query.js, collection.js and cardview.js (addAs).
 //
 //   readCollector(text) -> [{set, num, suffix}]      matchName(text) -> {card, score} | null
 //   matchScan({collector, name}) -> {id, card, p, how: "number"|"name", sure} | null      (no DOM, tested in node)
@@ -172,49 +172,82 @@ function crop(src, r, scale, bin = false) {
   return c;
 }
 
-// ---------- checking the art ----------
-// A misread number can name a real card (030a read as 300), so the frame is compared with the printing's picture:
-// both shrunk to a small grey thumbnail of the art (the top of the card), normalised, correlated. 1 the same picture,
-// around 0 unrelated ones.
-const ART = { x: 0.08, y: 0.1, w: 0.84, h: 0.42 }, THUMB = [24, 16];
-function thumb(src) {
-  const [w, h] = THUMB, c = document.createElement("canvas");
-  c.width = w; c.height = h;
+// ---------- the art ----------
+// The frame's art against every printing's (web/art.js, made by art.py: 16 x 12 colour pictures). It needs no text, so it
+// works in any language, and pixels of glare (bright, colourless) are left out. The frame is tried at a few offsets and
+// sizes, as no card is held exactly. Correlation: 1 the same picture, around 0 unrelated ones.
+const ART = { x: 0.08, y: 0.1, w: 0.84, h: 0.42 }, FRAME = [186, 260];
+const ART_SURE = { score: 0.6, ahead: 0.12 }; // in trials with glare, tilt and noise these gave no wrong card
+let artIndex = null;
+function artReady() {
+  return (artIndex ??= (async () => {
+    if (!window.ART_INDEX) await new Promise((ok, fail) => {
+      const s = document.createElement("script");
+      s.src = "art.js"; s.onload = ok; s.onerror = () => fail(new Error("couldn't load the pictures to compare with"));
+      document.head.append(s);
+    });
+    return readArt(window.ART_INDEX);
+  })().catch((e) => { artIndex = null; throw e; }));
+}
+function readArt(x) {
+  const bin = atob(x.px), px = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) px[i] = bin.charCodeAt(i);
+  return { ...x, px, at: new Map(x.ids.map((id, i) => [id, i])) };
+}
+// rgba: the pixels of a w x h picture of the card -> {score: Float32Array per printing, best, ahead, clear}
+// ahead: how far the best is above the best other art; clear: the part of the art free of glare
+function artMatch(rgba, w, h, ix) {
+  const cells = ix.w * ix.h, N = ix.ids.length, score = new Float32Array(N).fill(-1), v = new Float32Array(cells * 3), mask = new Uint8Array(cells), x = new Float32Array(cells * 3);
+  let clear = 0;
+  for (const s of [0.93, 1, 1.07]) for (const dx of [-0.03, 0, 0.03]) for (const dy of [-0.025, 0, 0.025]) {
+    const X0 = (ART.x + ART.w / 2 + dx - ART.w * s / 2) * w, Y0 = (ART.y + ART.h / 2 + dy - ART.h * s / 2) * h, cw = ART.w * s * w / ix.w, ch = ART.h * s * h / ix.h;
+    const glare = new Uint8Array(cells);
+    for (let cy = 0, k = 0; cy < ix.h; cy++) for (let cx = 0; cx < ix.w; cx++, k++) {
+      const x0 = Math.max(0, Math.round(X0 + cx * cw)), x1 = Math.min(w, Math.max(x0 + 1, Math.round(X0 + (cx + 1) * cw)));
+      const y0 = Math.max(0, Math.round(Y0 + cy * ch)), y1 = Math.min(h, Math.max(y0 + 1, Math.round(Y0 + (cy + 1) * ch)));
+      let r = 0, g = 0, b = 0, n = 0;
+      for (let y = y0; y < y1; y++) for (let i = (y * w + x0) * 4, e = (y * w + x1) * 4; i < e; i += 4) { r += rgba[i]; g += rgba[i + 1]; b += rgba[i + 2]; n++; }
+      n = n || 1;
+      v[k * 3] = r /= n; v[k * 3 + 1] = g /= n; v[k * 3 + 2] = b /= n;
+      const lo = Math.min(r, g, b);
+      glare[k] = lo > 185 && Math.max(r, g, b) - lo < 35 ? 1 : 0;
+    }
+    let free = 0;
+    for (let k = 0; k < cells; k++) { // with the cells around it: glare fades out
+      const c = k % ix.w;
+      mask[k] = glare[k] || (c && glare[k - 1]) || (c < ix.w - 1 && glare[k + 1]) || (k >= ix.w && glare[k - ix.w]) || (k < cells - ix.w && glare[k + ix.w]) ? 0 : 1;
+      free += mask[k];
+    }
+    clear = Math.max(clear, free / cells);
+    if (free < cells * 0.2) continue;
+    let mean = 0, norm = 0;
+    const use = [];
+    for (let k = 0; k < cells; k++) if (mask[k]) for (let c = 0; c < 3; c++) { use.push(k * 3 + c); mean += v[k * 3 + c]; }
+    mean /= use.length;
+    for (const k of use) { x[k] = v[k] - mean; norm += x[k] * x[k]; }
+    if (norm < use.length * 9) continue; // nearly one colour: no picture there
+    norm = Math.sqrt(norm);
+    const trust = Math.min(1, 0.8 + 0.4 * free / cells); // less art to go by counts a little less
+    for (let i = 0; i < N; i++) {
+      const o = i * cells * 3;
+      let sx = 0, s1 = 0, s2 = 0;
+      for (let j = 0; j < use.length; j++) { const k = use[j], p = ix.px[o + k]; sx += p * x[k]; s1 += p; s2 += p * p; }
+      const c = trust * sx / (norm * Math.sqrt(Math.max(1e-6, s2 - s1 * s1 / use.length)));
+      if (c > score[i]) score[i] = c;
+    }
+  }
+  let best = 0, other = -1;
+  for (let i = 1; i < N; i++) if (score[i] > score[best]) best = i;
+  for (let i = 0; i < N; i++) if (ix.group[i] !== ix.group[best] && score[i] > other) other = score[i];
+  return { score, best, ahead: score[best] - other, clear };
+}
+async function matchArt(canvas) {
+  const ix = await artReady(), c = document.createElement("canvas");
+  [c.width, c.height] = FRAME;
   const g = c.getContext("2d", { willReadFrequently: true });
   g.imageSmoothingQuality = "high";
-  const sw = src.width, sh = src.height;
-  g.drawImage(src, sw * ART.x, sh * ART.y, sw * ART.w, sh * ART.h, 0, 0, w, h);
-  const d = g.getImageData(0, 0, w, h).data, v = new Float32Array(w * h);
-  let mean = 0;
-  for (let i = 0; i < v.length; i++) { v[i] = d[i * 4] * 0.3 + d[i * 4 + 1] * 0.6 + d[i * 4 + 2] * 0.1; mean += v[i]; }
-  mean /= v.length;
-  let sd = 0;
-  for (let i = 0; i < v.length; i++) { v[i] -= mean; sd += v[i] * v[i]; }
-  sd = Math.sqrt(sd / v.length) || 1;
-  for (let i = 0; i < v.length; i++) v[i] /= sd;
-  return v;
-}
-const THUMBS = new Map(); // printing id -> Promise<thumb | null>
-function printThumb(p) {
-  if (!THUMBS.has(p.id)) {
-    THUMBS.set(p.id, (async () => {
-      if (!p.img) return null;
-      const img = new Image();
-      img.crossOrigin = "anonymous";
-      img.src = p.img;
-      await img.decode();
-      return thumb(img);
-    })().catch(() => null));
-  }
-  return THUMBS.get(p.id);
-}
-async function artScore(frame, p) {
-  const t = await printThumb(p);
-  if (!t) return null; // no picture (offline and never seen): can't tell
-  const f = thumb(frame);
-  let s = 0;
-  for (let i = 0; i < t.length; i++) s += t[i] * f[i];
-  return s / t.length;
+  g.drawImage(canvas, 0, 0, c.width, c.height);
+  return { ...artMatch(g.getImageData(0, 0, c.width, c.height).data, c.width, c.height, ix), ix };
 }
 
 const COLLECTOR_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789•·*/-. ";
@@ -249,10 +282,10 @@ function numberCandidates(text) {
   return [...out.values()];
 }
 // the candidate whose picture the frame shows (score >= 0.5); among printings with the same art the one read
-async function byArt(frame, cands, r) {
+function byArt(a, cands, r) {
   let best = null, known = false;
   for (const c of cands) {
-    const s = await artScore(frame, c.p);
+    const s = a && a.ix.at.has(c.p.id) ? a.score[a.ix.at.get(c.p.id)] : null;
     if (s == null) continue;
     known = true;
     if (!best || s > best.score + 0.03 || (Math.abs(s - best.score) <= 0.03 && c.read && !best.read)) best = { ...c, score: s };
@@ -295,15 +328,15 @@ function initScan(onAdd) {
       if (!hit) return "";
       const { card, p } = hit;
       const opts = card.printings.length > 1 ? `<select data-i="${i}">${card.printings.map((x) => `<option value="${esc(x.id)}"${x.id === p.id ? " selected" : ""}>${esc(x.id)}${x.kind ? ` · ${esc(x.kind)}` : ""}</option>`).join("")}</select>` : `<small>${esc(p.id)}</small>`;
-      return `<li class="${t.sure ? "" : "unsure"}">${p.img ? `<img src="${esc(p.img)}" alt="">` : ""}<span class="nm"><b>${esc(card.name)}</b>${opts}${t.sure ? "" : `<small class="warn">by name: check the printing</small>`}</span>
+      return `<li class="${t.sure ? "" : "unsure"}">${p.img ? `<img src="${esc(p.img)}" alt="">` : ""}<span class="nm"><b>${esc(card.name)}</b><span class="sel">${opts}<select data-ver="${i}" aria-label="Version">${Object.entries(VERSIONS).map(([k, l]) => `<option value="${k}"${(t.ver || "") === k ? " selected" : ""}>${l}</option>`).join("")}</select></span>${t.sure ? "" : `<small class="warn">check the printing</small>`}</span>
         <span class="own"><span role="button" data-d="-1" data-i="${i}">−</span><b>${t.n}</b><span role="button" data-d="1" data-i="${i}">+</span></span></li>`;
     }).reverse().join("");
   }
   function add(m) {
-    const t = tally.find((x) => x.id === m.id);
-    if (t) { t.n++; tally.splice(tally.indexOf(t), 1); tally.push(t); } else tally.push({ id: m.id, n: 1, sure: m.sure });
+    const ver = m.ver ?? addAs, t = tally.find((x) => x.id === m.id && (x.ver || "") === ver);
+    if (t) { t.n++; tally.splice(tally.indexOf(t), 1); tally.push(t); } else tally.push({ id: m.id, n: 1, sure: m.sure, ver });
     save(); show(); beep();
-    hint.textContent = `+1 ${m.card.name}`;
+    hint.textContent = `+1 ${m.card.name} · ${VERSIONS[ver]}`;
   }
 
   // the part of the video under the guide, at the camera's resolution
@@ -320,15 +353,32 @@ function initScan(onAdd) {
     return c;
   }
   async function find(canvas) {
-    const r = await recognize(canvas, { name: false });
-    let m = await byArt(canvas, numberCandidates(r.collector), r);
+    let a = null, m = null, r = { collector: "", name: "" };
+    try { a = await matchArt(canvas); } catch { /* offline and never loaded: the text alone */ }
+    if (a && a.score[a.best] >= ART_SURE.score && a.ahead >= ART_SURE.ahead) {
+      const grp = a.ix.group[a.best], same = a.ix.ids.filter((_, i) => a.ix.group[i] === grp).map((id) => PRINTS.get(id.toUpperCase())).filter(Boolean);
+      const hit = (x, sure) => ({ id: x.p.id, card: x.card, p: x.p, score: a.score[a.best], how: "art", sure });
+      if (same.length === 1) m = hit(same[0], true);
+      else if (same.length) {
+        // the same picture on several printings: the number decides, else the first one, to be checked
+        r = await recognize(canvas, { name: false });
+        const read = numberCandidates(r.collector).find((c) => c.read && same.some((x) => x.p.id === c.p.id));
+        const first = same.slice().sort((x, y) => (x.p.kind ? 1 : 0) - (y.p.kind ? 1 : 0))[0];
+        m = hit(read || first, !!read);
+      }
+    }
+    if (!m) {
+      r = await recognize(canvas, { name: false });
+      m = byArt(a, numberCandidates(r.collector), r);
+    }
     if (!m) {
       r.name = (await recognize(canvas, { collector: false })).name;
-      m = await byArt(canvas, nameCandidates(r.name).flatMap((card) => card.printings.map((p) => ({ card, p }))), r);
-      // no pictures to compare (offline and never seen): the text alone, to be checked
-      if (!m && r.artUnknown) { const t = matchScan(r); if (t) m = { ...t, sure: false }; }
+      m = byArt(a, nameCandidates(r.name).flatMap((card) => card.printings.map((p) => ({ card, p }))), r);
+      // no pictures to compare: the text alone, to be checked
+      if (!m && (!a || r.artUnknown)) { const t = matchScan(r); if (t) m = { ...t, sure: false }; }
     }
-    if (window.SETTINGS?.scanDebug) { hint.textContent = `${canvas.width}×${canvas.height} · ${r.collector.replace(/\s+/g, " ")} · ${r.name.replace(/\s+/g, " ").slice(0, 50)} → ${m ? `${m.id} ${m.score?.toFixed(2) ?? ""}` : "-"}`; window.SCAN_LAST = canvas; }
+    if (!m && a && a.clear < 0.5) hint.textContent = "Glare: tilt the card or the light a little";
+    if (window.SETTINGS?.scanDebug) { hint.textContent = `art ${a ? `${a.ix.ids[a.best]} ${a.score[a.best].toFixed(2)} +${a.ahead.toFixed(2)} clear ${a.clear.toFixed(2)}` : "-"} · ${r.collector.replace(/\s+/g, " ")} · ${r.name.replace(/\s+/g, " ").slice(0, 40)} → ${m?.id ?? "-"}`; window.SCAN_LAST = canvas; }
     return m;
   }
   async function loop() {
@@ -340,7 +390,7 @@ function initScan(onAdd) {
       if (!running) break;
       if (!m) {
         if (++empties >= 2) { armed = true; last = null; }
-        if (armed && !window.SETTINGS?.scanDebug) hint.textContent = "Hold a card in the frame, its bottom edge on the line";
+        if (armed && !window.SETTINGS?.scanDebug && !hint.textContent.startsWith("Glare")) hint.textContent = "Hold a card in the frame, its bottom edge on the line";
         continue;
       }
       empties = 0;
@@ -363,8 +413,9 @@ function initScan(onAdd) {
     const track = stream.getVideoTracks()[0];
     try { await track.applyConstraints({ advanced: [{ focusMode: "continuous" }] }); } catch { /* */ }
     $s(".torch").hidden = !track.getCapabilities?.().torch;
-    hint.textContent = "Loading the text recognition…";
-    try { await ocrWorker(); } catch (e) { hint.textContent = e.message; return; }
+    hint.textContent = "Loading the card pictures…";
+    // the pictures are enough to start; the text recognition is only needed when they leave a doubt
+    try { await artReady(); ocrWorker().catch(() => {}); } catch { try { await ocrWorker(); } catch (e) { hint.textContent = e.message; return; } }
     hint.textContent = "Hold a card in the frame, its bottom edge on the line";
     running = true; armed = true; last = null;
     loop();
@@ -410,12 +461,14 @@ function initScan(onAdd) {
   list.addEventListener("change", (e) => {
     const sel = e.target.closest("select");
     if (!sel) return;
-    const t = tally[+sel.dataset.i], same = tally.find((x) => x.id === sel.value && x !== t);
-    if (same) { same.n += t.n; tally.splice(tally.indexOf(t), 1); } else { t.id = sel.value; t.sure = true; }
+    const t = tally[+(sel.dataset.i ?? sel.dataset.ver)];
+    if (sel.dataset.ver !== undefined) t.ver = sel.value; else { t.id = sel.value; t.sure = true; }
+    const same = tally.find((x) => x !== t && x.id === t.id && (x.ver || "") === (t.ver || ""));
+    if (same) { same.n += t.n; same.sure ||= t.sure; tally.splice(tally.indexOf(t), 1); }
     save(); show();
   });
   $s(".addall").onclick = () => {
-    onAdd(tally.map(({ id, n }) => ({ id, n })));
+    onAdd(tally.map(({ id, n, ver }) => ({ id, n, ver: ver || "" })));
     hint.textContent = `Added ${tally.reduce((n, t) => n + t.n, 0)} cards to the collection`;
     tally = []; save(); show();
   };

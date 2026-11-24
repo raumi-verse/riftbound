@@ -67,9 +67,14 @@ const quote = (s) => /\s/.test(s) ? `"${s}"` : s;
 
 function imgSrc(r) { return r.p.img || r.printings.find((p) => p.img)?.img; }
 // − n + for one printing; the buttons are spans because they sit inside the card's button
+// which version − and + count: chosen on the collection page, plain English elsewhere
+let addAs = "";
+const versNote = (id) => Object.keys(VERSIONS).filter((k) => k && COLL.v(id, k)).map((k) => `${COLL.v(id, k)} ${VER_SHORT[k]}`).join(" · ");
+// every version of a printing on its own, in the card dialog
+const versionRows = (id) => `<div class="versions" data-id="${esc(id)}">${Object.entries(VERSIONS).map(([k, l]) => `<span class="ver"><span>${l}</span><span class="own" data-own="${esc(id)}" data-ver="${k}"><span role="button" data-d="-1" title="One less">−</span><b>${COLL.v(id, k)}</b><span role="button" data-d="1" title="One more">+</span></span></span>`).join("")}</div>`;
 const ownCtl = (id) => {
   const n = COLL.n(id);
-  return `<span class="own${n ? "" : " none"}" data-own="${esc(id)}"><span role="button" tabindex="-1" data-d="-1" title="One less">−</span><b>${n}</b><span role="button" tabindex="-1" data-d="1" title="One more (hover and press +)">+</span></span>`;
+  return `<span class="own${n ? "" : " none"}" data-own="${esc(id)}"><span role="button" tabindex="-1" data-d="-1" title="One less">−</span><b>${n}</b><span class="vers">${versNote(id)}</span><span role="button" tabindex="-1" data-d="1" title="One more (hover and press +)">+</span></span>`;
 };
 
 // how many of the cards a tile stands for you have: one printing, or any of the folded card's
@@ -102,8 +107,8 @@ function showCard(r, pos) {
     <p class="tags">${r.champion ? `Champion: ${qlink(`champ="${r.champion}" group:champion`, r.champion)} · ` : ""}${r.tags.filter((t) => t !== r.champion).map((t) => qlink(`tag="${t}"`, t)).join(", ")}</p>
     ${r.type === "Legend" ? `<p class="tags">${qlink(`for:"${r.name}" group:type`, "Everything this legend's deck may play")}</p>` : ""}
     ${sameChampion(r)}
-    <h3>Printings</h3>
-    <div class="prints">${r.printings.map((p) => `<div class="prw"><button class="pr" data-id="${esc(p.id + p.kind)}">${ICONS.rarity(p.rarity)} ${esc(p.set)} ${p.num ?? ""} · ${esc(p.rarity)}${p.kind ? ` · ${esc(p.kind)}` : ""}${p.artist ? `<small>${esc(p.artist)}</small>` : ""}</button>${ownCtl(p.id)}</div>`).join("")}</div>`;
+    <h3>Printings <small>your copies</small></h3>
+    <div class="prints">${r.printings.map((p) => `<div class="prw"><button class="pr" data-id="${esc(p.id + p.kind)}">${ICONS.rarity(p.rarity)} ${esc(p.set)} ${p.num ?? ""} · ${esc(p.rarity)}${p.kind ? ` · ${esc(p.kind)}` : ""}${p.artist ? `<small>${esc(p.artist)}</small>` : ""}</button>${versionRows(p.id)}</div>`).join("")}</div>`;
   d.querySelectorAll(".pr").forEach((b, i) => (b.onclick = () => show(r.printings[i])));
   d.querySelectorAll(".same button").forEach((b) => (b.onclick = () => showCard(FOLDED.find((c) => c.id === b.dataset.id), "")));
   d.querySelectorAll("[data-step]").forEach((b) => (b.onclick = () => onStep(Number(b.dataset.step))));
@@ -135,14 +140,19 @@ document.addEventListener("click", (e) => {
   const b = e.target.closest("[data-own] [data-d]");
   if (!b) return;
   e.preventDefault(); e.stopPropagation();
-  COLL.add(b.closest("[data-own]").dataset.own, Number(b.dataset.d));
+  const { own: id, ver } = b.closest("[data-own]").dataset, d = Number(b.dataset.d);
+  // a tile's − takes the chosen version, or else one you do have
+  const v = ver ?? (d > 0 || COLL.v(id, addAs) ? addAs : Object.keys(VERSIONS).find((k) => COLL.v(id, k)) ?? addAs);
+  COLL.add(id, d, v);
 }, true);
 STORE.on((kinds) => {
   if (!kinds.has("coll")) return;
   document.querySelectorAll("[data-own]").forEach((el) => {
-    const n = COLL.n(el.dataset.own);
+    const { own: id, ver } = el.dataset, n = ver === undefined ? COLL.n(id) : COLL.v(id, ver);
     $("b", el).textContent = n;
+    const note = $(".vers", el);
+    if (note) note.textContent = versNote(id);
     el.classList.toggle("none", !n);
-    el.closest(".card")?.classList.toggle("unowned", !n);
+    if (ver === undefined) el.closest(".card")?.classList.toggle("unowned", !n);
   });
 });

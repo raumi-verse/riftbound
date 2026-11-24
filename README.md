@@ -81,16 +81,17 @@ in the same turn.
 `collection.html`: how full each set is, and a set's binder with − count + on every printing (All, Owned, Missing; hover a card and
 press `+` or `−`). The search shows a badge on cards you have, counts per printing in the card dialog, and knows your collection:
 `own>=3` (copies in any printing), `own:0`, `ownp>=1 is:alt` (the alt arts you have), `is:owned`, `is:missing`, `sort:-own`, and
-the CSV export has an `own` column. **Add cards**:
+the CSV export has an `own` column. Each printing is counted as English, English foil, Chinese and Chinese
+foil: **+ adds** says which one the tiles' + means, the card dialog has all four (`is:foil`, `is:chinese`). **Add cards**:
 
-- **Scan**: on a phone, hold cards into the frame one after another. It reads the collector line (`OGN • 030a/298`: the
-  set comes from the set's size, the letters read badly) and compares the card's art with the printing's picture, so a misread
-  number doesn't add a wrong card; without a readable number the name is read and the art picks the printing. Each card
-  beeps into a list you can check (printing, count) before **Add all**. A card counts again after the frame was empty.
-  Light, a photo instead of the camera, and typing the number are there too. Text recognition is
-  [Tesseract.js](https://github.com/naptha/tesseract.js), loaded the first time you scan and kept for offline use.
-  `scanDebug: true` in `web/settings.js` shows what each frame read.
-- **Quick entry**: `ogn 42`, `OGN-042a x2`, `3x sfd 7`, `sfd r01 -1`, then a number alone for the same set.
+- **Scan**: on a phone, hold cards into the frame one after another. The art is compared with every printing's (`web/art.js`,
+  made by `art.py`), in any language and with glare left out; only when that leaves a doubt is the collector line
+  (`OGN • 030a/298`) or the name read. Printings with the same picture are told apart by their number, else marked to be checked.
+  Choose English or Chinese and foil before scanning (the camera can't tell); each line can be changed. Each card beeps into a list
+  you check before **Add all**. A card counts again after the frame was empty. Light, a photo, and typing the number are there too.
+  Text recognition is [Tesseract.js](https://github.com/naptha/tesseract.js), loaded the first time it's needed and kept offline.
+  Nothing learns from use. `scanDebug: true` in `web/settings.js` shows what each frame gave.
+- **Quick entry**: `ogn 42`, `OGN-042a x2`, `3x sfd 7`, `sfd r01 -1`, then a number alone for the same set; `zh` and `foil` at the end for those.
 - **Paste a list**: quick entries, printing ids, `3 Name` lines, a CSV with an `id` and an `own`/`count` column (this page's
   export), or a deck code; add to what you have or replace the counts, with a preview and undo.
 
@@ -144,6 +145,7 @@ folding, hiding tokens/runes, domain order, the sync server, the points to win, 
 ## Files
 
 - `sync.py`: fetch, fold printings into cards, link champions, write `web/cards.js`
+- `art.py`: the scan's art index, `web/art.js` (needs Pillow and NumPy)
 - `server.py`: the sync server (accounts, records, the table's endpoints)
 - `web/icons/`: the game's symbols (domains, might, exhaust, energy, types, rarities, keyword banners) from Piltover
   Archive's CDN; `sync.py` downloads missing ones

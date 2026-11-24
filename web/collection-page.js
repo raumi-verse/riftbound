@@ -72,8 +72,19 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "/" && !e.target.closest("input, textarea, select") && !$("dialog[open]")) { e.preventDefault(); $("#name").focus(); return; }
   if (!hovered || $("dialog[open]") || e.target.closest("input, textarea, select") || e.ctrlKey || e.metaKey || e.altKey) return;
   const d = { "+": 1, "=": 1, "-": -1, "_": -1 }[e.key];
-  if (d) { e.preventDefault(); COLL.add(hovered, d); }
+  if (d) { e.preventDefault(); $(`#results [data-own="${CSS.escape(hovered)}"] [data-d="${d}"]`)?.click(); }
 });
+
+// the version that + and scanning count, one choice for both
+addAs = recall("rb-add-as", "");
+if (!(addAs in VERSIONS)) addAs = "";
+const asForms = document.querySelectorAll("form.as");
+function showAs() { for (const f of asForms) { f.lang.value = addAs.startsWith("zh") ? "zh" : "en"; f.foil.checked = addAs.endsWith("foil"); } }
+for (const f of asForms) {
+  f.addEventListener("submit", (e) => e.preventDefault());
+  f.addEventListener("change", () => { addAs = verOf(f.lang.value, f.foil.checked); remember("rb-add-as", addAs); showAs(); });
+}
+showAs();
 
 // ---------- Add ----------
 
@@ -91,24 +102,24 @@ $("#add").onclick = () => {
 // one printing per Enter; a number alone reuses the last set
 function quickEntry() {
   const d = sheet({ title: "Quick entry", html: `<form><label class="field"><span>Set and number</span><input name="e" class="mono" placeholder="ogn 42" spellcheck="false" autocomplete="off" autocapitalize="off" enterkeyhint="done"></label></form>
-    <div class="entry-out" aria-live="polite"><p class="note"><code>OGN-042a x2</code> two of an alt art · <code>42</code> same set as before · <code>-ogn 42</code> takes one off</p></div>` });
+    <div class="entry-out" aria-live="polite"><p class="note"><code>OGN-042a x2</code> two of an alt art · <code>42</code> same set as before · <code>-ogn 42</code> takes one off · <code>ogn 42 zh foil</code> Chinese, foil (else: ${VERSIONS[addAs]}, as chosen on the page)</p></div>` });
   const out = $(".entry-out", d), inp = $("input", d);
   inp.focus();
   $("form", d).onsubmit = (ev) => {
     ev.preventDefault();
     const e = parseEntry(inp.value, lastSet);
     if (e.error != null) { if (e.error) out.innerHTML = `<p class="err">${esc(e.error)}</p>`; return; }
-    const before = COLL.n(e.id), n = COLL.add(e.id, e.n), src = e.p.img || imgSrc({ p: e.p, printings: e.card.printings });
+    const ver = e.ver ?? addAs, before = COLL.n(e.id), n = COLL.add(e.id, e.n, ver), src = e.p.img || imgSrc({ p: e.p, printings: e.card.printings });
     lastSet = e.set;
     inp.value = "";
-    out.innerHTML = `<div class="entered">${src ? `<img src="${esc(src)}" alt="">` : ""}<span><b>${esc(e.card.name)}</b><small>${esc(e.id)}${e.p.kind ? ` · ${esc(e.p.kind)}` : ""}</small><span class="now">${n - before > 0 ? "+" : ""}${n - before} · you have <b>${n}</b></span></span><button type="button" class="btn tonal">Undo</button></div>`;
-    $("button", out).onclick = () => { COLL.add(e.id, before - n); out.innerHTML = `<p class="note">Undone: ${esc(e.card.name)}</p>`; inp.focus(); };
+    out.innerHTML = `<div class="entered">${src ? `<img src="${esc(src)}" alt="">` : ""}<span><b>${esc(e.card.name)}</b><small>${esc(e.id)}${e.p.kind ? ` · ${esc(e.p.kind)}` : ""} · ${VERSIONS[ver]}</small><span class="now">${n - before > 0 ? "+" : ""}${n - before} · you have <b>${n}</b></span></span><button type="button" class="btn tonal">Undo</button></div>`;
+    $("button", out).onclick = () => { COLL.add(e.id, before - n, ver); out.innerHTML = `<p class="note">Undone: ${esc(e.card.name)}</p>`; inp.focus(); };
   };
 }
 
 function pasteList() {
   const d = sheet({ title: "Paste a list", cls: "wide", html: `<form>
-    <p class="note">One per line: <code>ogn 42 3</code>, <code>OGN-042a</code>, <code>3 Jinx, Demolitionist</code> (its first printing), <code>1 Jinx, Demolitionist (OGN-030a)</code>;
+    <p class="note">One per line: <code>ogn 42 3</code>, <code>OGN-042a</code>, <code>3 Jinx, Demolitionist</code> (its first printing), <code>1 Jinx, Demolitionist (OGN-030a)</code>, each with <code>zh</code> and <code>foil</code> at the end for those;
       a CSV with an <code>id</code> column and <code>own</code> or <code>count</code> (the search page's export); or a deck code (one of each card in it).</p>
     <textarea name="t" rows="7" class="mono" spellcheck="false" autocomplete="off" aria-label="The list"></textarea>
     ${seg("Counts", "mode", [["add", "Add to mine"], ["set", "Replace mine"]], "add")}
@@ -121,8 +132,8 @@ function pasteList() {
     const replace = f.mode.value === "set", { items, problems } = pasted;
     $(".pv", d).innerHTML = (problems.length ? `<ul class="problems">${problems.slice(0, 20).map((p) => `<li>${esc(p)}</li>`).join("")}${problems.length > 20 ? `<li>… ${problems.length - 20} more</li>` : ""}</ul>` : "")
       + (items.length ? `<p>${items.length} printings, ${items.reduce((n, i) => n + i.n, 0)} cards</p><table class="gf-table">${items.map((i) => {
-        const now = COLL.n(i.id), after = Math.max(0, replace ? i.n : now + i.n);
-        return `<tr><td>${esc(i.card.name)} <small>${esc(i.id)}</small></td><td class="n">${now} → <b>${after}</b></td></tr>`;
+        const now = replace && i.ver == null ? COLL.n(i.id) : COLL.v(i.id, i.ver || ""), after = Math.max(0, replace ? i.n : now + i.n);
+        return `<tr><td>${esc(i.card.name)} <small>${esc(i.id)}${i.ver ? ` · ${VERSIONS[i.ver]}` : ""}</small></td><td class="n">${now} → <b>${after}</b></td></tr>`;
       }).join("")}</table>` : "");
     $(".btn.filled", d).disabled = !items.length;
   };
@@ -133,10 +144,10 @@ function pasteList() {
     clearTimeout(t);
     preview();
     if (!pasted.items.length) return;
-    const before = pasted.items.map((i) => ({ id: i.id, n: COLL.n(i.id) }));
+    const before = new Map(pasted.items.map((i) => [i.id, STORE.get("coll", i.id)]));
     COLL.apply(pasted.items, f.mode.value);
     d.close();
-    toast(`${pasted.items.length} printing${pasted.items.length === 1 ? "" : "s"} ${f.mode.value === "set" ? "set" : "added"}`, { undo: () => COLL.apply(before, "set") });
+    toast(`${pasted.items.length} printing${pasted.items.length === 1 ? "" : "s"} ${f.mode.value === "set" ? "set" : "added"}`, { undo: () => { for (const [id, r] of before) if (r) STORE.put("coll", id, r); else STORE.del("coll", id); } });
   };
   f.t.focus();
 }

@@ -55,9 +55,11 @@ function playable(r, l) {
 // The collection: window.OWNED is a Map printing id -> copies (app.js fills it from the store). own counts the card
 // in any printing (own>=3: a playset), ownp the printing itself (ownp>=1 is:alt: the alt arts you have).
 const ownedPrint = (id) => (window.OWNED && window.OWNED.get(id)) || 0;
+const ownedVer = (r, re) => r.prints.some((p) => Object.keys((window.OWNED_X && window.OWNED_X.get(p.id)) || {}).some((k) => re.test(k)));
 const ownedCard = (r) => r.printings.reduce((n, p) => n + ownedPrint(p.id), 0);
 
 const IS = {
+  foil: (r) => ownedVer(r, /foil/), chinese: (r) => ownedVer(r, /zh/), // copies you have
   owned: (r) => ownedCard(r) > 0,
   missing: (r) => ownedCard(r) === 0,
   alt: (r) => r.prints.some((p) => p.alt),
@@ -453,7 +455,7 @@ function stats(list) {
 // exportList(run(q), kind): the shown rows in page order. names: each name once; ids: the shown printings;
 // link: a query for exactly those printings; csv: a spreadsheet, energy and might only where the card has them.
 
-const CSV_COLS = ["name", "id", "set", "num", "rarity", "type", "supertype", "domains", "energy", "might", "power", "champion", "artist", "own"];
+const CSV_COLS = ["name", "id", "set", "num", "rarity", "type", "supertype", "domains", "energy", "might", "power", "champion", "artist", "own", "foil", "zh", "zh-foil"];
 const csvCell = (x) => (x = x == null ? "" : String(x), /[",\n]/.test(x) ? `"${x.replace(/"/g, '""')}"` : x);
 function exportList(res, kind) {
   const rows = res.sections.flatMap((s) => s.rows);
@@ -461,7 +463,7 @@ function exportList(res, kind) {
   if (kind === "ids") return rows.map((r) => r.p.id).join("\n");
   if (kind === "link") return [`id=${rows.map((r) => r.p.id).join("|")}`, ...Object.entries(res.dirs).map(([k, v]) => `${k}:${v}`)].join(" ");
   return [CSV_COLS, ...rows.map((r) => [r.name, r.p.id, r.p.set, r.p.num, r.p.rarity, r.type, r.supertype, r.domains.join("+"),
-    HAS_STAT.energy(r) ? r.energy : null, HAS_STAT.might(r) ? r.might : null, r.power, r.champion, r.p.artist, ownedPrint(r.p.id)])]
+    HAS_STAT.energy(r) ? r.energy : null, HAS_STAT.might(r) ? r.might : null, r.power, r.champion, r.p.artist, ownedPrint(r.p.id), ...["foil", "zh", "zh-foil"].map((k) => window.OWNED_X?.get(r.p.id)?.[k] || 0)])]
     .map((cells) => cells.map(csvCell).join(",")).join("\r\n") + "\r\n";
 }
 const uniq0 = (xs) => [...new Set(xs)]; // in order

@@ -1,8 +1,11 @@
 "use strict";
-// The collection: copies per printing in the store (kind "coll", id = printing id, data {n}), and reading what you
+// The collection: copies per printing in the store (kind "coll", id = printing id, data {n, x}), and reading what you
 // type or paste. No DOM (test/ runs it in node). Needs query.js and store.js first; deck.js for pasted deck codes.
 //
-//   COLL.n(id)  COLL.add(id, delta) -> new count  COLL.set(id, n)  COLL.apply([{id, n}], "add"|"set")
+// n counts every copy; x says how many of them are another version than plain English: {foil: 1, zh: 2, "zh-foil": 1}.
+//
+//   COLL.n(id)  COLL.v(id, ver)  COLL.add(id, delta, ver) -> new total  COLL.set(id, n)  COLL.setV(id, ver, n)
+//   COLL.apply([{id, n, ver?}], "add"|"set")      VERSIONS: ver -> name ("" is plain English)
 //   parseEntry("ogn 42 3", lastSet) -> {id, n, card, p, set} | {error}     quick entry, one printing per line
 //   parseBulk(text) -> {items: [{id, n, card, p}], problems: [text…]}       lists, ids, CSV, deck codes
 
@@ -10,16 +13,58 @@ const PRINTS = new Map(); // "OGN-042A" -> {card, p}
 for (const c of CARDS) for (const p of c.printings) PRINTS.set(p.id.toUpperCase(), { card: c, p });
 const SET_IDS = new Set([...PRINTS.keys()].map((id) => id.split("-")[0]));
 
+const VERSIONS = { "": "English", foil: "English foil", zh: "Chinese", "zh-foil": "Chinese foil" };
+const VER_SHORT = { "": "EN", foil: "EN ✦", zh: "中", "zh-foil": "中 ✦" };
+const verOf = (lang, foil) => [lang === "zh" ? "zh" : "", foil ? "foil" : ""].filter(Boolean).join("-");
+// "ogn 42 zh foil": the version words at the end, and the rest; ver undefined without any
+function splitVersion(s) {
+  let lang, foil, m;
+  while ((m = s.match(/^(.*\S)\s+(foil|zh|cn|chinese|中文|en|english)$/i))) {
+    const w = m[2].toLowerCase();
+    if (w === "foil") foil = true; else lang = /^en/.test(w) ? "en" : "zh";
+    s = m[1];
+  }
+  return { rest: s, ver: lang || foil ? verOf(lang, foil) : undefined };
+}
+function put(id, counts) {
+  const n = Object.values(counts).reduce((a, b) => a + b, 0);
+  const x = Object.fromEntries(Object.entries(counts).filter(([k, c]) => k && c));
+  if (n) STORE.put("coll", id, Object.keys(x).length ? { n, x } : { n }); else STORE.del("coll", id);
+  return n;
+}
+
 const COLL = {
   n: (id) => STORE.get("coll", id)?.n || 0,
   set(id, n) {
     n = Math.max(0, Math.round(n) || 0);
     if (n === COLL.n(id)) return n;
-    if (n) STORE.put("coll", id, { n }); else STORE.del("coll", id);
-    return n;
+    // the total, whatever the versions: more are plain English, fewer take those off first
+    const c = Object.fromEntries(Object.keys(VERSIONS).map((k) => [k, COLL.v(id, k)]));
+    let less = COLL.n(id) - n;
+    if (less < 0) c[""] -= less;
+    else for (const k of Object.keys(c)) { const t = Math.min(less, c[k]); c[k] -= t; less -= t; }
+    return put(id, c);
   },
-  add: (id, delta) => COLL.set(id, COLL.n(id) + delta),
-  apply(items, mode = "add") { for (const { id, n } of items) COLL.set(id, mode === "set" ? n : COLL.n(id) + n); },
+  // copies of one version
+  v(id, ver = "") {
+    const r = STORE.get("coll", id);
+    if (!r) return 0;
+    return ver ? r.x?.[ver] || 0 : r.n - Object.values(r.x || {}).reduce((a, b) => a + b, 0);
+  },
+  setV(id, ver, n) {
+    n = Math.max(0, Math.round(n) || 0);
+    const c = Object.fromEntries(Object.keys(VERSIONS).map((k) => [k, k === ver ? n : COLL.v(id, k)]));
+    if (n === COLL.v(id, ver)) return COLL.n(id);
+    return put(id, c);
+  },
+  // one less of a version you have none of takes nothing off
+  add: (id, delta, ver = "") => COLL.setV(id, ver, COLL.v(id, ver) + delta),
+  apply(items, mode = "add") {
+    for (const { id, n, ver } of items) {
+      if (mode !== "set") COLL.add(id, n, ver || "");
+      else if (ver == null) COLL.set(id, n); else COLL.setV(id, ver, n);
+    }
+  },
 };
 
 // The printing a set, number and variant mean: OGN 42 -> OGN-042, SFD R1 -> SFD-R01, OGN 300* (or s) signed
@@ -36,6 +81,11 @@ function findPrint(set, prefix, num, variant) {
 // "-ogn 42" (one less), a full printing id ("OGN-151b-Nexus"). n is the change, default +1.
 const ENTRY = /^([a-z]{2,5})?[\s-]*(r|sp|t)?(\d{1,3})\s*([ab*s]?)$/i;
 function parseEntry(line, lastSet) {
+  const { rest, ver } = splitVersion(line.trim());
+  const e = parsePlain(rest, lastSet);
+  return e.error != null || ver === undefined ? e : { ...e, ver };
+}
+function parsePlain(line, lastSet) {
   let s = line.trim().replace(/\s+/g, " "), n = 1, m;
   if (!s) return { error: "" };
   const isCard = (x) => PRINTS.has(x.toUpperCase()) || (ENTRY.test(x) && !/^[a-z]{2,5}$/i.test(x)); // not a set alone
@@ -59,11 +109,12 @@ function parseEntry(line, lastSet) {
 // ("ogn 42 3"), a printing id, or "3 Name" / "Name x3" (the card's base printing; "Name (OGN-042a)" picks one).
 function parseBulk(text) {
   const items = new Map(), problems = [];
-  const add = (hit, n, line) => {
+  const add = (hit, n, line, ver) => {
     if (!hit) return problems.push(`not found: "${line}"`);
-    const e = items.get(hit.p.id) || { id: hit.p.id, n: 0, card: hit.card, p: hit.p };
+    const key = `${hit.p.id} ${ver ?? "any"}`;
+    const e = items.get(key) || { id: hit.p.id, n: 0, card: hit.card, p: hit.p, ...(ver === undefined ? {} : { ver }) };
     e.n += n;
-    items.set(hit.p.id, e);
+    items.set(key, e);
   };
   const lines = text.split(/\r?\n/).map((l) => l.trim()).filter((l) => l && !l.startsWith("#") && !l.startsWith("//"));
   const head = lines[0]?.toLowerCase().split(",").map((x) => x.trim().replace(/^"|"$/g, ""));
@@ -72,7 +123,12 @@ function parseBulk(text) {
     for (const l of lines.slice(1)) {
       const cells = l.match(/("([^"]|"")*"|[^,]*)(,|$)/g).map((c) => c.replace(/,$/, "").replace(/^"|"$/g, "").replace(/""/g, '"'));
       const n = cnt == null ? 1 : parseInt(cells[cnt]) || 0;
-      if (n) add(PRINTS.get((cells[id] || "").toUpperCase()), n, l);
+      const hit = PRINTS.get((cells[id] || "").toUpperCase());
+      const x = ["foil", "zh", "zh-foil"].map((k) => [k, head.includes(k) ? parseInt(cells[head.indexOf(k)]) || 0 : 0]).filter(([, c]) => c);
+      if (!x.length || !hit) { if (n) add(hit, n, l); continue; }
+      const plain = n - x.reduce((a, [, c]) => a + c, 0);
+      if (plain > 0) add(hit, plain, l, "");
+      for (const [k, c] of x) add(hit, c, l, k);
     }
     return { items: [...items.values()], problems };
   }
@@ -88,14 +144,15 @@ function parseBulk(text) {
   for (const l of lines) {
     if (HEADER.test(l)) continue;
     const e = parseEntry(l, lastSet);
-    if (!e.error) { add(e, e.n, l); lastSet = e.set; continue; }
-    let m = l.match(/^(\d+)\s*x?\s+(.+)$/i), n = 1, name = l;
+    if (!e.error) { add(e, e.n, l, e.ver); lastSet = e.set; continue; }
+    const { rest, ver } = byName.has(l.replace(/^\d+\s*x?\s+/i, "").toLowerCase()) ? { rest: l } : splitVersion(l);
+    let m = rest.match(/^(\d+)\s*x?\s+(.+)$/i), n = 1, name = rest;
     if (m) [n, name] = [+m[1], m[2]];
-    else if ((m = l.match(/^(.+?)\s+x(\d+)$/i))) [name, n] = [m[1], +m[2]];
+    else if ((m = rest.match(/^(.+?)\s+x(\d+)$/i))) [name, n] = [m[1], +m[2]];
     const pid = name.match(/\(([A-Z]{2,5}-[\w*-]+)\)\s*$/i);
-    if (pid && PRINTS.has(pid[1].toUpperCase())) { add(PRINTS.get(pid[1].toUpperCase()), n, l); continue; }
+    if (pid && PRINTS.has(pid[1].toUpperCase())) { add(PRINTS.get(pid[1].toUpperCase()), n, l, ver); continue; }
     const card = byName.get(name.replace(/\s*\([^)]*\)\s*$/, "").trim().toLowerCase());
-    add(card && PRINTS.get(card.id.toUpperCase()), n, l);
+    add(card && PRINTS.get(card.id.toUpperCase()), n, l, ver);
   }
   return { items: [...items.values()], problems };
 }

@@ -220,7 +220,22 @@ section > h2 small { margin-left: .3rem; }
 .card .own { position: absolute; left: 50%; bottom: 4%; transform: translateX(-50%); }
 .card.unowned img { opacity: .4; filter: grayscale(.6); transition: opacity .2s, filter .2s; }
 .card.unowned:hover img { opacity: .8; }
-dialog .prw { display: flex; gap: .4rem; align-items: center; }
+dialog .prw { display: grid; gap: .4rem; padding-bottom: .5rem; }
+.versions { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: .3rem .8rem; }
+ol.versions { display: block; }
+.ver { display: flex; align-items: center; justify-content: space-between; gap: .4rem; color: var(--subtext); padding-left: .5rem; }
+.own .vers:empty { display: none; }
+.own .vers { font-size: 11px; white-space: nowrap; padding-right: .2rem; }
+.as { display: flex; align-items: center; gap: .6rem; padding: .7rem 0 0; color: var(--subtext); font-weight: 600; }
+.as > span { white-space: nowrap; }
+.as .seg { flex: 0 1 20rem; }
+.as .seg label span { padding: 0 .5rem; }
+.scan .as { padding: .5rem .7rem 0; }
+.chip-check { position: relative; cursor: pointer; }
+.chip-check input { position: absolute; opacity: 0; }
+.chip-check span { white-space: nowrap; display: flex; align-items: center; min-height: 46px; padding: 0 1.1rem; border-radius: 99px; background: var(--raised2); color: var(--subtext); }
+.chip-check input:checked + span { background: var(--accent); color: var(--crust); }
+.chip-check input:focus-visible + span { outline: 2px solid var(--text); }
 dialog .prw .pr { flex: 1; }
 dialog .prw .own { background: var(--surface0); color: var(--text); }
 
@@ -273,6 +288,9 @@ dialog.scan[open] { display: flex; flex-direction: column; gap: 0; }
 .scan .tally img { height: 3.2rem; border-radius: 3px; }
 .scan .tally .nm { flex: 1; display: grid; gap: .1rem; min-width: 0; }
 .scan .tally select { font: inherit; font-size: 12px; background: var(--surface0); color: var(--text); border: 0; border-radius: 4px; max-width: 100%; }
+.scan .tally .sel { display: flex; gap: .3rem; align-items: center; flex-wrap: wrap; }
+.scan .tally .nm { overflow: hidden; }
+.scan .tally select { max-width: 9rem !important; width: auto; min-height: 34px; padding: 0 .4rem; }
 .scan .tally small { color: var(--overlay); }
 .scan .tally .warn { color: var(--order); }
 .scan .tally .own { background: var(--surface0); color: var(--text); }
