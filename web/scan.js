@@ -434,8 +434,10 @@ function snapshot(canvas) {
 // Hold cards into the frame one after another. A card counts when two frames in a row agree; the same card counts
 // again only after the camera saw no card (or another one). The tally is kept until "Add all".
 
-// the pile a card goes on: domain, then rarity
-const pileOf = (card, p) => `${card.domains.map((d) => `<img class="ic" src="icons/${d.toLowerCase()}.webp" alt="">`).join("")}<b>${card.domains.map((d) => cap(d.toLowerCase())).join(" + ") || "Colorless"}</b> · ${p.rarity}`;
+// where a filed card goes, in words
+const placeText = (f) => f.already ? `with your other ${esc(f.card.name)}` : [f.after && `after <b>${esc(f.after.name)}</b>`, f.before && `before <b>${esc(f.before.name)}</b>`].filter(Boolean).join(", ") || "first of its pile";
+// the pile a card goes on: legends with their signatures, battlefields, else domain and rarity
+const pileOf = (card, p) => filePile(card) ? `<b>${FILE_PILES[filePile(card)]}</b>${filePile(card) === 1 ? ` · ${esc(card.champion)}` : ""}` : `${card.domains.map((d) => `<img class="ic" src="icons/${d.toLowerCase()}.webp" alt="">`).join("")}<b>${card.domains.map((d) => cap(d.toLowerCase())).join(" + ") || "Colorless"}</b> · ${p.rarity}`;
 
 function initScan(onAdd) {
   const dlg = document.getElementById("scan");
@@ -467,8 +469,13 @@ function initScan(onAdd) {
     $s(".count").textContent = tally.length ? `${total} card${total === 1 ? "" : "s"}` : "";
     $s(".addall").disabled = !tally.length;
     const rows = tally.map((t, i) => [t, i]).reverse();
-    // the order the cards are filed in (defaultSort)
-    if (inOrder) { const by = sorter(S.defaultSort, []), r = (t) => { const h = PRINTS.get(t.id.toUpperCase()); return { ...h.card, p: h.p }; }; rows.sort(([a], [b]) => by(r(a), r(b)) || a.id.localeCompare(b.id)); }
+    // the order the cards are filed in (fileOrder), and where each goes
+    const place = new Map();
+    if (inOrder) {
+      const f = filing(tally.map((t, k0) => ({ ...t, k0 })), STORE.all("coll").filter((r) => r.data.n > 0).map((r) => r.id));
+      f.forEach((x, i) => place.set(x.k0, { ...x, i }));
+      rows.sort(([, a], [, b]) => (place.get(a)?.i ?? 0) - (place.get(b)?.i ?? 0));
+    }
     let lastPile = null;
     $s(".order").setAttribute("aria-pressed", inOrder);
     list.innerHTML = rows.map(([t, i]) => {
@@ -478,7 +485,7 @@ function initScan(onAdd) {
       const opts = card.printings.length > 1 ? `<select data-i="${i}">${card.printings.map((x) => `<option value="${esc(x.id)}"${x.id === p.id ? " selected" : ""}>${esc(x.id)}${x.kind ? ` · ${esc(x.kind)}` : ""}</option>`).join("")}</select>` : `<small>${esc(p.id)}</small>`;
       const pl = inOrder ? pileOf(card, p) : "", head = pl !== lastPile && pl ? `<li class="pile-head">${pl}</li>` : "";
       lastPile = pl;
-      return `${head}<li class="${t.sure && !t.guess ? "" : "unsure"}">${p.img ? `<img src="${esc(p.img)}" alt="">` : ""}<span class="nm"><b>${esc(card.name)}</b><span class="sel">${opts}<select data-ver="${i}" aria-label="Version">${Object.entries(VERSIONS).map(([k, l]) => `<option value="${k}"${(t.ver || "") === k ? " selected" : ""}>${l}</option>`).join("")}</select></span>${t.sure ? "" : `<small class="warn">check the printing</small>`}${t.guess ? `<small class="warn">check the language</small>` : ""}</span>
+      return `${head}<li class="${t.sure && !t.guess ? "" : "unsure"}">${p.img ? `<img src="${esc(p.img)}" alt="">` : ""}<span class="nm"><b>${esc(card.name)}</b><span class="sel">${opts}<select data-ver="${i}" aria-label="Version">${Object.entries(VERSIONS).map(([k, l]) => `<option value="${k}"${(t.ver || "") === k ? " selected" : ""}>${l}</option>`).join("")}</select></span>${place.has(i) ? `<small class="place">${placeText(place.get(i))}</small>` : ""}${t.sure ? "" : `<small class="warn">check the printing</small>`}${t.guess ? `<small class="warn">check the language</small>` : ""}</span>
         <button type="button" class="foil" data-foil="${i}" aria-pressed="${(t.ver || "").endsWith("foil")}" title="Foil" aria-label="Foil">✦</button>
         <span class="own"><span role="button" data-d="-1" data-i="${i}">−</span><b>${t.n}</b><span role="button" data-d="1" data-i="${i}">+</span></span></li>`;
     }).join("");

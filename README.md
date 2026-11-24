@@ -89,7 +89,8 @@ foil: **+ adds** says which one the tiles' + means, the card dialog has all four
   (`OGN • 030a/298`) or the name read. Printings with the same picture are told apart by their number, else marked to be checked.
   English or Chinese is told by comparing the text with the English picture; unsure, your choice
   counts and the line says so. Foil is yours to say (✦). After each card the pile it goes on is shown (domain, rarity); **In order** lists
-  the scanned cards as they are filed (`defaultSort`). Each card beeps into a list
+  the scanned cards as they are filed, each with the cards it goes between. After **Add all**, **File** keeps that list to tick off.
+  The order: `fileOrder` in `web/settings.js`, then the legends each followed by its signatures, then the battlefields (`sort:file`). Each card beeps into a list
   you check before **Add all**. A card counts again after the frame was empty. Light, a photo, and typing the number are there too.
   Text recognition is [Tesseract.js](https://github.com/naptha/tesseract.js), loaded the first time it's needed and kept offline.
   Nothing learns from use, but a scan you correct (printing, language, taken off, or typed after it found nothing) is kept with its

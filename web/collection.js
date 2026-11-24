@@ -67,6 +67,24 @@ const COLL = {
   },
 };
 
+// Where a batch of printings goes in the box. items: [{id, n, ver}], boxed: the printings already in it.
+// -> [{id, n, ver, card, p, pile, after, before, already}] in filing order; after: the card just in front, maybe one of
+// the batch itself (it's filed by then); before: the next one in the box; already: the box has this printing.
+function filing(items, boxed) {
+  const row = (id) => { const h = PRINTS.get(id.toUpperCase()); return h && { id, card: h.card, p: h.p, key: fileKey({ ...h.card, p: h.p }) }; };
+  const box = new Set(boxed), batch = new Set(items.map((i) => i.id));
+  const all = [...new Set([...box, ...batch])].map(row).filter(Boolean).sort((a, b) => cmp(a.key, b.key));
+  const at = new Map(all.map((r, i) => [r.id, i]));
+  // neighbours only within a pile
+  const near = (r) => (r ? { id: r.id, name: r.card.name } : null);
+  return items.filter((i) => at.has(i.id)).map((i) => {
+    const k = at.get(i.id), r = all[k], same = (x) => x && x.key[0] === r.key[0];
+    let next = k + 1;
+    while (next < all.length && !box.has(all[next].id)) next++;
+    return { ...i, card: r.card, p: r.p, pile: r.key[0], already: box.has(i.id), after: same(all[k - 1]) ? near(all[k - 1]) : null, before: same(all[next]) ? near(all[next]) : null, k };
+  }).sort((a, b) => a.k - b.k || String(a.ver || "").localeCompare(String(b.ver || "")));
+}
+
 // The printing a set, number and variant mean: OGN 42 -> OGN-042, SFD R1 -> SFD-R01, OGN 300* (or s) signed
 function findPrint(set, prefix, num, variant) {
   const v = variant === "s" ? "*" : variant;

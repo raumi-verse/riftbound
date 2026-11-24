@@ -88,7 +88,48 @@ showAs();
 
 // ---------- Add ----------
 
-const openScan = initScan((items) => COLL.apply(items));
+// what was just scanned, until it's filed in the box: the list in filing order, to tick off
+const FILE_KEY = "rb-filing"; // {items: [{id, n, ver}], done: [index]}
+const toFile = () => { try { return JSON.parse(localStorage.getItem(FILE_KEY)); } catch { return null; } };
+const setToFile = (f) => { try { if (f) localStorage.setItem(FILE_KEY, JSON.stringify(f)); else localStorage.removeItem(FILE_KEY); } catch { /* */ } showFile(); };
+function showFile() {
+  const f = toFile(), left = f ? f.items.length - f.done.length : 0;
+  $("#file").hidden = !left;
+  $("#file").textContent = `File ${left}`;
+}
+function fileSheet() {
+  const f = toFile();
+  if (!f) return;
+  // the box as it was before this batch, so a new card isn't "already there"
+  const mine = new Map();
+  for (const i of f.items) mine.set(i.id, (mine.get(i.id) || 0) + i.n);
+  const list = filing(f.items.map((i, at) => ({ ...i, at })), STORE.all("coll").filter((r) => r.data.n > (mine.get(r.id) || 0)).map((r) => r.id));
+  let last = "";
+  const d = sheet({ title: "File these", cls: "wide tall", onClose: showFile, html: `<p class="note">In the order of your box. Tap a card once it's in.</p><ul class="file-list">${list.map((x) => {
+    const pl = pileOf(x.card, x.p), head = pl !== last ? `<li class="pile-head">${pl}</li>` : "";
+    last = pl;
+    return `${head}<li><button type="button" class="list-row" data-at="${x.at}" aria-pressed="${f.done.includes(x.at)}">${x.p.img ? `<img src="${esc(x.p.img)}" alt="" loading="lazy">` : ""}<span class="txt"><b>${x.n > 1 ? `${x.n}× ` : ""}${esc(x.card.name)} <small>${esc(x.id)} · ${VERSIONS[x.ver || ""]}</small></b><small class="place">${placeText(x)}</small></span><span class="tick" aria-hidden="true">✓</span></button></li>`;
+  }).join("")}</ul><div class="row end sticky"><button type="button" class="btn tonal all">All filed</button></div>` });
+  d.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-at]");
+    if (!b) return;
+    const at = Number(b.dataset.at), on = b.getAttribute("aria-pressed") !== "true";
+    b.setAttribute("aria-pressed", on);
+    f.done = on ? [...f.done, at] : f.done.filter((x) => x !== at);
+    setToFile(f);
+  });
+  $(".all", d).onclick = () => { setToFile(null); d.close(); };
+}
+$("#file").onclick = fileSheet;
+showFile();
+
+const openScan = initScan((items) => {
+  COLL.apply(items);
+  // what an earlier batch still has to file stays on the list
+  const f = toFile(), rest = f ? f.items.filter((_, i) => !f.done.includes(i)) : [];
+  for (const i of items) { const same = rest.find((x) => x.id === i.id && (x.ver || "") === (i.ver || "")); if (same) same.n += i.n; else rest.push({ ...i }); }
+  setToFile({ items: rest, done: [] });
+});
 let lastSet = null;
 $("#add").onclick = () => {
   const d = sheet({ title: "Add cards", cls: "add-sheet", html: `

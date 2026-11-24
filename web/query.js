@@ -321,6 +321,17 @@ function test(node, r) {
 // ---------- sorting and grouping ----------
 
 const domainKey = (r) => r.domains.length ? r.domains.map((d) => S.domainOrder.indexOf(d)).concat([99]) : [99];
+// The order in the box: [pile, …]. Pile 0 is settings' fileOrder; 1 the legends by domain, each champion's legends
+// followed by that champion's signatures; 2 the battlefields.
+const FILE_PILES = ["", "Legends", "Battlefields"];
+const filePile = (r) => r.type === "Battlefield" ? 2 : r.type === "Legend" || (r.supertype === "Signature" && r.champion) ? 1 : 0;
+const firstLegend = new Map();
+for (const l of [...LEGENDS].sort((a, b) => cmp(domainKey(a), domainKey(b)) || cmp(a.id, b.id))) if (!firstLegend.has(l.champion)) firstLegend.set(l.champion, l);
+function fileKey(r) {
+  const pile = filePile(r), plain = (S.fileOrder || "domain,rarity,energy,power,set,num").split(",").map((k) => SORT_KEYS[k.trim()]?.(r) ?? 0);
+  const legend = pile === 1 && firstLegend.get(r.champion);
+  return [pile, legend ? domainKey(legend) : [], legend ? legend.champion : "", legend && r.type !== "Legend" ? 1 : 0, ...plain, r.p.id];
+}
 const SORT_KEYS = {
   name: (r) => r.name.toLowerCase(),
   energy: (r) => r.energy ?? Infinity, e: (r) => r.energy ?? Infinity,
@@ -333,6 +344,7 @@ const SORT_KEYS = {
   num: (r) => [SET_ORDER.indexOf(r.p.set), r.p.num ?? 0],
   champion: (r) => r.champion ? r.champion.toLowerCase() : "￿",
   role: (r) => r.role ?? 9,
+  file: fileKey,
   own: (r) => ownedCard(r),
   ownp: (r) => ownedPrint(r.p.id),
 };

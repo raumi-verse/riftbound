@@ -89,3 +89,31 @@ test("text: the same is English, other strokes aren't, none says nothing", () =>
   assert.ok(textMatch(page(99), a) < G("OTHER_TO"));
   assert.equal(textMatch(a, page(7, 0, 230)), null);
 });
+
+const CARDS = G("CARDS"), filing = G("filing");
+const sorted = (cs) => { const by = G("sorter")("file", []); return [...cs].map((c) => ({ ...c, p: c.printings[0] })).sort(by); };
+test("filing: main cards, then legends with their signatures, then battlefields", () => {
+  const s = sorted(CARDS), pile = G("filePile");
+  const piles = s.map((c) => pile(c));
+  assert.deepEqual(piles, [...piles].sort());
+  const legends = s.filter((c) => pile(c) === 1);
+  // a champion's cards are one run, legends first
+  const runs = legends.map((c) => c.champion).filter((c, i, a) => c !== a[i - 1]);
+  assert.equal(runs.length, new Set(runs).size);
+  for (const ch of runs) { const t = legends.filter((c) => c.champion === ch).map((c) => c.type === "Legend"); assert.deepEqual(t, [...t].sort((a, b) => b - a), ch); }
+  const main = s.filter((c) => pile(c) === 0), D = G("SETTINGS").domainOrder, RA = G("RARITY_ORDER");
+  for (let i = 1; i < main.length; i++) {
+    const k = (c) => [c.domains.length ? D.indexOf(c.domains[0]) : 99, RA.indexOf(c.printings[0].rarity), c.energy ?? 999, c.power ?? 999];
+    const a = k(main[i - 1]), b = k(main[i]), d = a.findIndex((x, j) => x !== b[j]);
+    assert.ok(d < 0 || a[d] < b[d], `${main[i - 1].name} / ${main[i].name}`);
+  }
+});
+test("filing: between which cards", () => {
+  const m = sorted(CARDS).filter((c) => G("filePile")(c) === 0).slice(0, 6).map((c) => c.printings[0].id);
+  const f = filing([{ id: m[3], n: 1 }, { id: m[1], n: 2, ver: "zh" }, { id: m[2], n: 1 }, { id: m[4], n: 1 }], [m[0], m[4], m[5]]);
+  assert.deepEqual(Array.from(f, (x) => [x.id, x.after.id, x.before.id, x.already]),
+    [[m[1], m[0], m[4], false], [m[2], m[1], m[4], false], [m[3], m[2], m[4], false], [m[4], m[3], m[5], true]]);
+  const b = CARDS.find((c) => c.type === "Battlefield").printings[0].id;
+  const alone = filing([{ id: b, n: 1 }], m)[0]; // nothing of another pile is a neighbour
+  assert.equal(alone.after, null); assert.equal(alone.before, null);
+});

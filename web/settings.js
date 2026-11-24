@@ -15,8 +15,10 @@ window.SETTINGS = {
   defaultQuery: "",
 
   // Sort used when the query has no sort:, and the order cards are filed in after scanning. Keys: name, energy (e), might (m), power (p), type,
-  // domain, rarity, set, champion, role, num. A leading "-" sorts that key descending.
-  defaultSort: "domain,rarity,energy,power,set,num",
+  // domain, rarity, set, champion, role, num, and file: as the cards are filed in the box, by fileOrder; then the
+  // legends, each followed by its signatures; then the battlefields. A leading "-" sorts that key descending.
+  fileOrder: "domain,rarity,energy,power,set,num",
+  defaultSort: "file",
 
   // Inside group:champion the legend comes first, then champion units, then signatures, then other
   // cards with the champion's tag; this sort decides the order inside each of those.
