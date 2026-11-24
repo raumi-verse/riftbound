@@ -9,13 +9,15 @@
 <link rel="icon" href="icons/app-192.png">
 <link rel="apple-touch-icon" href="icons/app-192.png">
 <meta name="theme-color" content="#181825">
+<script type="speculationrules">{"prefetch":[{"where":{"selector_matches":"nav.pages a"},"eagerness":"moderate"}]}</script>
 </head>
-<body class="play-page">
+<body data-page="play" class="play-page">
 <header>
-  <nav class="pages"><a href="./">Cards</a><a href="decks.html">Decks</a><a href="play.html" aria-current="page">Play</a><a href="goldfish.html">Goldfish</a></nav>
+  <nav class="pages" aria-label="Pages"><a href="./"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="3" width="10" height="15" rx="2"/><path d="M17 6l3 1-3.5 13-7-2"/></svg><span>Cards</span></a><a href="collection.html"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14v16H5zM9 4v16M12 9h4M12 13h4"/></svg><span>Collection</span></a><a href="decks.html"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l9 5-9 5-9-5zM3 12l9 5 9-5M3 16l9 5 9-5"/></svg><span>Decks</span></a><a href="play.html" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M10 8.5l6 3.5-6 3.5z"/></svg><span>Play</span></a></nav>
 </header>
 <main id="play"></main>
 <script src="settings.js"></script>
+<script src="ui.js"></script>
 <script src="cards.js"></script>
 <script src="store.js"></script>
 <script src="sync.js"></script>
@@ -23,8 +25,9 @@
 <script src="deck.js"></script>
 <script src="collection.js"></script>
 <script src="library.js"></script>
-<script src="ui.js"></script>
+<script src="match.js"></script>
 <script src="play.js"></script>
+<script src="shell.js"></script>
 <script src="account.js"></script>
 </body>
 </html>

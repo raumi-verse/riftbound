@@ -3,6 +3,7 @@
 // Needs store.js first. No DOM (test/ runs it in node with a fake fetch).
 //
 //   SYNC.login(server, name, password)   SYNC.logout()   SYNC.now() -> Promise   SYNC.call(method, path, body)
+//   SYNC.passkeyStart({server, link}) leaves for the passkey login, SYNC.passkeyFinish(code, other) ends it (login.html)
 //   SYNC.state() -> {status, server, name, last, error}   SYNC.onState(f) -> off()
 //   status: "local" (not logged in), "idle", "syncing", "offline", "error"
 // It syncs on page load, 2 s after an edit, when the network comes back and when the page is shown again.
@@ -72,9 +73,8 @@ const SYNC = (() => {
   const apply = STORE.apply;
   STORE.apply = (c) => { applying = true; try { return apply(c); } finally { applying = false; } };
 
-  async function login(server, name, password) {
-    server = (server || DEFAULT_SERVER).trim().replace(/\/+$/, "");
-    const r = await call("POST", "/login", { name, password, label: (typeof navigator !== "undefined" && navigator.userAgent) || "" }, null, server);
+  // logged in: as someone else this device starts empty, else its records go up with the first sync
+  async function adopt(server, r) {
     if (STORE.owner() && STORE.owner().toLowerCase() !== r.name.toLowerCase()) STORE.wipe(); // someone else's records
     STORE.setOwner(r.name);
     STORE.setCursor(0); // everything the account has; local records made logged out go up with the first sync
@@ -83,6 +83,42 @@ const SYNC = (() => {
     set("idle");
     await now();
     return r.name;
+  }
+  const tidy = (server) => (server || conf.server || DEFAULT_SERVER).trim().replace(/\/+$/, "");
+  const device = () => (typeof navigator !== "undefined" && navigator.userAgent) || "";
+
+  async function login(server, name, password) {
+    server = tidy(server || DEFAULT_SERVER);
+    return adopt(server, await call("POST", "/login", { name, password, label: device() }, null, server));
+  }
+
+  // Passkeys: the page keeps a verifier, goes to the provider through the server and comes back to login.html#code=…,
+  // where the code and the verifier make a token. localStorage, as an installed app may come back in another tab.
+  const PK = "rb-passkey", PK_TTL = 15 * 60e3;
+  const b64url = (bytes) => btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  const canPasskey = () => typeof location !== "undefined" && location.protocol.startsWith("http") && !!globalThis.crypto?.subtle;
+  async function passkeyStart({ server, link = false } = {}) {
+    server = tidy(server);
+    const verifier = b64url(crypto.getRandomValues(new Uint8Array(32)));
+    const challenge = b64url(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier))));
+    const r = await call("POST", "/oidc/start", { challenge, return: new URL("login.html", location.href).href.split(/[?#]/)[0], link }, link ? conf.token : null, server);
+    ls?.setItem(PK, JSON.stringify({ verifier, server, link, back: location.href, at: Date.now() }));
+    location.assign(r.url);
+  }
+  // on login.html; other(name) -> whether to go on when this browser holds someone else's records
+  async function passkeyFinish(code, other) {
+    let p = null;
+    try { p = JSON.parse(ls?.getItem(PK)); ls?.removeItem(PK); } catch { /* */ }
+    if (!p || Date.now() - p.at > PK_TTL) throw new Error("this login has expired, try again");
+    const r = await call("POST", "/oidc/finish", { code, verifier: p.verifier, label: device() }, p.link ? conf.token : null, p.server);
+    if (!p.link) {
+      if (STORE.owner() && STORE.owner().toLowerCase() !== r.name.toLowerCase() && !(await other(r.name))) {
+        await call("POST", "/logout", {}, r.token, p.server).catch(() => {});
+        return { back: p.back };
+      }
+      await adopt(p.server, r);
+    }
+    return { back: p.back, name: r.name, linked: !!r.linked };
   }
 
   async function logout() {
@@ -101,5 +137,5 @@ const SYNC = (() => {
     setTimeout(now, 0);
   } catch { /* node */ }
 
-  return { login, logout, now, call: (m, p, b) => call(m, p, b), state, onState: (f) => { listeners.add(f); return () => listeners.delete(f); }, DEFAULT_SERVER };
+  return { login, logout, canPasskey, passkeyStart, passkeyFinish, now, call: (m, p, b) => call(m, p, b), state, onState: (f) => { listeners.add(f); return () => listeners.delete(f); }, DEFAULT_SERVER };
 })();

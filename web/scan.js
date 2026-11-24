@@ -261,7 +261,7 @@ async function byArt(frame, cands, r) {
   return best && best.score >= 0.5 ? { id: best.p.id, card: best.card, p: best.p, score: best.score, how: "art", sure: true } : null;
 }
 
-// ---------- the scan screen (index.html #scan) ----------
+// ---------- the scan screen (collection.html #scan) ----------
 // Hold cards into the frame one after another. A card counts when two frames in a row agree; the same card counts
 // again only after the camera saw no card (or another one). The tally is kept until "Add all".
 

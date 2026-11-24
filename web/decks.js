@@ -9,6 +9,17 @@ function route() {
   const [, id, ver] = location.hash.match(/^#d\/([^/]+)(?:\/(.+))?/) || [];
   if (id && LIB.deck(id)) deckView(id, ver); else listView();
 }
+// moving between the list and a deck: the deck's picture travels along
+const artOf = (id) => [...main.querySelectorAll("[data-deck]")].find((x) => x.dataset.deck === id)?.querySelector(".art");
+let here = location.hash;
+function go() {
+  const from = (here.match(/^#d\/([^/]+)/) || [])[1], to = (location.hash.match(/^#d\/([^/]+)/) || [])[1];
+  here = location.hash;
+  if (from === to) return route();
+  const a = !from && to && artOf(to);
+  if (a) a.style.viewTransitionName = "deck-art";
+  smoothly(() => { route(); scrollTo(0, 0); const b = from && !to && artOf(from); if (b) b.style.viewTransitionName = "deck-art"; });
+}
 
 // ---------- the list ----------
 
@@ -16,7 +27,7 @@ function deckTile(d) {
   const legend = CARD_BY_ID.get(d.legend), ms = LIB.matches(d.id), r = record(ms), v = d.version && LIB.version(d.version);
   const miss = v ? missing(v.list).reduce((n, x) => n + x.need - x.have, 0) : 0;
   const img = cardImg(legend);
-  return `<a class="deck-tile" href="#d/${esc(d.id)}">
+  return `<a class="deck-tile" href="#d/${esc(d.id)}" data-deck="${esc(d.id)}" style="${domainStyle(legend)}">
     <span class="art"${img ? ` style="background-image:url('${esc(img)}')"` : ""}></span>
     <span class="body"><b>${esc(d.name)}</b><small>${esc(legend?.name || "no legend")}${v ? ` · v${v.n}` : ""}</small>
       <span class="rec">${recordText(r)}${r.n ? ` <small>${pct(r.pct)}</small>` : ""}${ms[0] ? ` <small>· ${day(ms[0].date)}</small>` : ""}</span>
@@ -31,24 +42,25 @@ function listView() {
   const by = (s) => decks.filter((d) => d.status === s);
   const recent = LIB.matches().slice(0, 12);
   main.innerHTML = `
-    <div class="head"><h1>Decks</h1><span class="grow"></span><button type="button" class="primary" id="new-open">New deck</button></div>
-    <form id="new-deck" class="card-form" hidden>
-      <label>Name <input name="name" placeholder="defaults to the legend's name"></label>
-      <label><span>List: a Piltover deck code or <code>2 Name</code> lines</span><textarea name="list" rows="8" spellcheck="false" required></textarea></label>
-      <div class="row"><button type="button" class="cancel">Cancel</button><button class="primary">Save deck</button></div>
-    </form>
+    <div class="head"><h1>Decks</h1><span class="grow"></span><a class="btn text" href="goldfish.html">Goldfish</a><button type="button" class="btn filled" id="new-open">＋ New deck</button></div>
     ${!decks.length ? `<p class="empty">No decks yet. <b>New deck</b> takes a deck code or a list, e.g. from Piltover Archive.</p>` : ""}
     ${by("pinned").length ? `<h2>Pinned</h2><div class="decks">${by("pinned").map(deckTile).join("")}</div>` : ""}
     ${by("active").length ? `<h2>${by("pinned").length ? "Others" : "Decks"}</h2><div class="decks">${by("active").map(deckTile).join("")}</div>` : ""}
     ${by("archived").length ? `<details class="archived"><summary>Archived (${by("archived").length})</summary><div class="decks">${by("archived").map(deckTile).join("")}</div></details>` : ""}
     ${recent.length ? `<h2>Recent games</h2>${matchTable(recent, true)}` : ""}`;
-  const form = $("#new-deck");
-  $("#new-open").onclick = () => { form.hidden = false; form.list.focus(); };
-  form.querySelector(".cancel").onclick = () => { form.hidden = true; };
-  form.onsubmit = (e) => {
-    e.preventDefault();
-    const r = LIB.save(null, form.list.value, form.name.value.trim() ? { name: form.name.value.trim() } : {});
-    location.hash = `#d/${r.deck}`;
+  $("#new-open").onclick = () => {
+    const d = sheet({ title: "New deck", cls: "wide", html: `<form class="fields">
+      <label class="field"><span>Deck code (e.g. from Piltover Archive) or <code>2 Name</code> lines</span><textarea name="list" rows="9" class="mono" spellcheck="false" required></textarea></label>
+      <label class="field"><span>Name</span><input name="name" placeholder="the legend's name" autocomplete="off"></label>
+      <div class="row end"><button class="btn filled big">Save deck</button></div></form>` });
+    const form = $("form", d);
+    form.list.focus();
+    form.onsubmit = (e) => {
+      e.preventDefault();
+      const name = form.elements.name.value.trim(), r = LIB.save(null, form.list.value, name ? { name } : {});
+      d.close();
+      location.hash = `#d/${r.deck}`;
+    };
   };
 }
 
@@ -67,19 +79,19 @@ function matchTable(ms, withDeck = false) {
   if (!ms.length) return `<p class="note">No games${withDeck ? "" : " with these filters"}.</p>`;
   const vers = new Map();
   const vn = (id) => { if (!id) return ""; if (!vers.has(id)) vers.set(id, LIB.version(id)?.n); return vers.get(id) ? `v${vers.get(id)}` : ""; };
-  return `<div class="scroll"><table class="gf-table matches"><thead><tr><th>When</th>${withDeck ? "<th>Deck</th>" : "<th></th>"}<th>Result</th><th>Against</th><th>Went</th><th class="n">Score</th><th>Notes</th></tr></thead><tbody>
-    ${ms.map((m) => `<tr data-m="${esc(m.id)}" class="${esc(m.result || "")}">
-      <td>${day(m.date)}${m.game ? ` <small>g${m.game}</small>` : ""}</td>
-      <td>${withDeck ? esc(LIB.deck(m.deck)?.name || "deleted deck") : `<small>${vn(m.deckver)}</small>`}</td>
-      <td class="res">${esc(m.result || "?")}</td>
-      <td>${esc(legendName(m.oppLegend))}${m.oppName ? ` <small>${esc(m.oppName)}</small>` : ""}</td>
-      <td>${m.first == null ? "" : m.first ? "first" : "second"}</td>
-      <td class="n" title="${["me", "opp"].map((w) => `${w === "me" ? "me" : "opponent"}: ${KINDS.map((k) => `${m[w]?.[k] || 0} ${k}`).join(", ")}`).join("\n")}">${m.me || m.opp ? `${scoreOf(m.me)}–${scoreOf(m.opp)}` : ""}</td>
-      <td class="notes">${m.needsNotes ? `<span class="todo">write notes</span> ` : ""}${(m.tags || []).map((t) => `<span class="chip">${esc(t)}</span>`).join(" ")} ${esc((m.notes || "").slice(0, 90))}${(m.notes || "").length > 90 ? "…" : ""}${m.source === "tts" ? ` <small>TTS</small>` : ""}</td></tr>`).join("")}
-  </tbody></table></div>`;
+  return `<ul class="games">${ms.map((m) => {
+    const opp = cardOf(m.oppLegend);
+    const about = [withDeck ? LIB.deck(m.deck)?.name || (m.deck ? "deleted deck" : "no deck") : vn(m.deckver), day(m.date), m.game ? `game ${m.game}` : "", m.first == null ? "" : m.first ? "went first" : "went second", m.event, m.source === "tts" ? "TTS" : ""].filter(Boolean);
+    const score = m.me || m.opp ? `${scoreOf(m.me)}–${scoreOf(m.opp)}` : "";
+    return `<li><button type="button" class="list-row ${esc(m.result || "")}" data-m="${esc(m.id)}">
+      <span class="art" style="${artStyle(opp)}"></span>
+      <span class="txt"><b>${opp ? esc(opp.name) : "Unknown legend"}${m.oppName ? ` <small>${esc(m.oppName)}</small>` : ""}</b><small>${esc(about.join(" · "))}</small>
+        ${m.needsNotes || (m.tags || []).length || m.notes ? `<span class="notes">${m.needsNotes ? `<span class="todo">write notes</span> ` : ""}${(m.tags || []).map((t) => `<span class="chip">${esc(t)}</span>`).join(" ")} ${esc((m.notes || "").slice(0, 90))}${(m.notes || "").length > 90 ? "…" : ""}</span>` : ""}</span>
+      <span class="res" title="${["me", "opp"].map((w) => `${w === "me" ? "me" : "opponent"}: ${KINDS.map((k) => `${m[w]?.[k] || 0} ${k}`).join(", ")}`).join("\n")}"><b>${esc(m.result || "?")}</b><small>${score}</small></span></button></li>`;
+  }).join("")}</ul>`;
 }
 main.addEventListener("click", (e) => {
-  const tr = e.target.closest("tr[data-m]");
+  const tr = e.target.closest("[data-m]");
   if (!tr) return;
   const id = tr.dataset.m;
   matchDialog({ id, ...STORE.get("match", id) });
@@ -134,24 +146,24 @@ function deckView(id, verId) {
       <div class="grow">
         <input class="title" id="name" value="${esc(d.name)}" aria-label="Deck name">
         <p class="note">${esc(legend?.name || "no legend")} · ${recordText(r)}${r.n ? ` · ${pct(r.pct)}` : ""}</p>
-        <div class="seg status">${STATUSES.map((s) => `<button type="button" data-status="${s}" class="${d.status === s ? "on" : ""}">${{ pinned: "★ Pinned", active: "Active", archived: "Archived" }[s]}</button>`).join("")}</div>
-        <label class="tags">Tags <input id="tags" value="${esc((d.tags || []).join(", "))}" placeholder="e.g. main, testing"></label>
+        <form class="status">${seg("", "status", STATUSES.map((s) => [s, { pinned: "★ Pinned", active: "Active", archived: "Archived" }[s]]), d.status)}</form>
+        <form id="tag-form">${tagInput("tags", d.tags || [], usual(LIB.decks().flatMap((x) => x.tags || [])))}</form>
         <div class="row actions">
-          <a class="btn primary" href="play.html#deck=${esc(id)}">Play</a>
-          <button type="button" id="log">Log a game</button>
-          ${cur ? `<a class="btn" href="goldfish.html#${encodeURIComponent(cur.code || cur.list)}">Goldfish</a>` : ""}
-          ${cur?.code ? `<button type="button" data-copy="${esc(cur.code)}">Copy deck code</button>` : ""}
-          ${cur ? `<button type="button" data-copy="${esc(cur.list)}">Copy list</button>` : ""}
-          <button type="button" id="del" class="danger">Delete</button>
+          <a class="btn filled big" href="play.html#deck=${esc(id)}">Play</a>
+          <button type="button" class="btn tonal" id="log">Log a game</button>
+          ${cur ? `<a class="btn tonal" href="goldfish.html#${encodeURIComponent(cur.code || cur.list)}">Goldfish</a>` : ""}
+          ${cur?.code ? `<button type="button" class="btn text" data-copy="${esc(cur.code)}">Copy deck code</button>` : ""}
+          ${cur ? `<button type="button" class="btn text" data-copy="${esc(cur.list)}">Copy list</button>` : ""}
+          <button type="button" id="del" class="btn text danger-text">Delete</button>
         </div>
       </div>
     </div>
     <div class="cols">
       <section>
         <h2>${shown === cur ? "List" : "Version"} ${shown ? `<small>v${shown.n} · ${day(shown.created)}</small>` : ""}
-          ${shown && shown !== cur ? `<button type="button" id="restore">Use this version again</button> <a href="#d/${esc(id)}">current</a>` : `<button type="button" id="edit">Edit</button>`}</h2>
-        <form id="edit-form" hidden><textarea name="list" rows="14" spellcheck="false">${esc(cur?.list || "")}</textarea>
-          <div class="row"><button type="button" class="cancel">Cancel</button><button class="primary">Save as new version</button></div></form>
+          ${shown && shown !== cur ? `<button type="button" class="btn tonal" id="restore">Use this version again</button> <a href="#d/${esc(id)}">current</a>` : `<button type="button" class="btn tonal" id="edit">Edit</button>`}</h2>
+        <form id="edit-form" hidden><textarea name="list" rows="14" class="mono" spellcheck="false">${esc(cur?.list || "")}</textarea>
+          <div class="row"><button type="button" class="btn text cancel">Cancel</button><button class="btn filled">Save as new version</button></div></form>
         <div id="list">${shown ? listHtml(shown.list) : ""}</div>
         <h2>Versions</h2>
         <ol class="versions" reversed>${versions.slice().reverse().map((v, i, arr) => {
@@ -182,18 +194,20 @@ function deckView(id, verId) {
     </div>`;
 
   $("#name").onchange = (e) => LIB.setDeck(id, { name: e.target.value.trim() || d.name });
-  $("#tags").onchange = (e) => LIB.setDeck(id, { tags: splitTags(e.target.value) });
+  const tf = $("#tag-form");
+  tf.onsubmit = (e) => e.preventDefault();
+  tf.onchange = (e) => { if (e.target.name === "tags") LIB.setDeck(id, { tags: splitTags(e.target.value) }); };
   let t;
   $("#notes").oninput = (e) => { clearTimeout(t); t = setTimeout(() => LIB.setDeck(id, { notes: e.target.value }), 600); };
   $("#notes").onblur = (e) => { clearTimeout(t); if (e.target.value !== (LIB.deck(id).notes || "")) LIB.setDeck(id, { notes: e.target.value }); };
-  main.querySelectorAll("[data-status]").forEach((b) => (b.onclick = () => LIB.setDeck(id, { status: b.dataset.status })));
+  $("form.status").onchange = (e) => LIB.setDeck(id, { status: e.target.value });
   main.querySelectorAll("[data-copy]").forEach((b) => (b.onclick = async () => {
     try { await navigator.clipboard.writeText(b.dataset.copy); b.textContent = "Copied"; } catch { b.textContent = "Couldn't copy"; }
   }));
   main.querySelectorAll(".filters select").forEach((s) => (s.onchange = () => { filters[s.dataset.f] = s.value; route(); }));
   $("#log").onclick = () => matchDialog({ deck: id, deckver: d.version });
-  $("#del").onclick = () => {
-    if (confirm(`Delete "${d.name}" and its ${versions.length} versions? Its ${all.length} games stay (as "deleted deck"). Archiving keeps it all, just out of the way.`)) {
+  $("#del").onclick = async () => {
+    if (await ask(`Delete "${d.name}" and its ${versions.length} versions? Its ${all.length} games stay (as "deleted deck"). Archiving keeps it all, just out of the way.`, { yes: "Delete", danger: true })) {
       LIB.removeDeck(id); location.hash = "";
     }
   };
@@ -220,13 +234,12 @@ main.addEventListener("mouseover", (e) => {
 main.addEventListener("mouseout", (e) => { if (e.target.closest("a[data-img]")) peek.hidden = true; });
 peek.hidden = true;
 
-window.addEventListener("hashchange", route);
+window.addEventListener("hashchange", go);
 // edits from another tab or device; not while typing in this one
 STORE.on((kinds) => {
   if (!["deck", "deckver", "match", "coll"].some((k) => kinds.has(k))) return;
-  if (document.activeElement?.matches("input, textarea") && main.contains(document.activeElement)) return;
-  if ($("#match-dlg")?.open) return;
+  if (document.activeElement?.matches("input:not([type=radio]), textarea") && main.contains(document.activeElement)) return;
+  if ($("dialog[open]")) return;
   route();
 });
 route();
-if ("serviceWorker" in navigator && location.protocol.startsWith("http")) navigator.serviceWorker.register("sw.js");

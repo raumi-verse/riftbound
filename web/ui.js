@@ -1,78 +1,103 @@
 "use strict";
-// Bits the Decks and Play pages share: escaping, card pictures, the legend picker, the match dialog.
-// Needs query.js and library.js first.
+// The controls every page shares: escaping, sheets, toasts, steppers, chips. No other file needed first.
+//
+//   sheet({title, cls, html, onClose}) -> <dialog>, open; .close() shuts and removes it
+//   ask(text, {yes, no, danger}) -> Promise<bool>     toast(text, {undo: fn})
+//   stepper(name, value, {min, max, label})           a number with − and +; a named input inside forms
+//   tagInput(name, values, known)                     chips to tick and a field to add one; form[name].value is "a, b"
+//   fillChips(name, values)                           earlier values that fill the form's input [name]
+//   seg(legend, name, [[value, label]], current)      one of a few
 
-const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 const $ = (s, root = document) => root.querySelector(s);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 const cardImg = (c) => c && (c.printings.find((p) => p.id === c.id)?.img || c.printings.find((p) => p.img)?.img);
-const domainIcons = (c) => (c?.domains || []).map((d) => `<img class="ic" src="icons/${d.toLowerCase()}.webp" alt="${esc(d)}" title="${esc(d)}">`).join("");
-const legendName = (id) => { const c = cardOf(id); return c ? c.name : id ? "?" : "—"; };
-// the opponent's list as the table sent it (a deck code) or as typed, written out
-const listText = (s) => { if (!s) return ""; if (/^[A-Z2-7]{8,}=*$/i.test(s.trim())) { try { return deckText(readDeck(s.trim())); } catch { /* */ } } return s; };
-const pct = (x) => (x == null ? "–" : `${Math.round(x * 100)}%`);
-const recordText = (r) => r.n ? `${r.win}–${r.loss}${r.draw ? `–${r.draw}` : ""}` : "no games";
-const day = (iso) => (iso ? new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : "");
-const LEGEND_LIST = [...LEGENDS].sort((a, b) => (a.champion + a.name).localeCompare(b.champion + b.name));
-const legendOptions = (sel) => `<option value="">unknown legend</option>${LEGEND_LIST.map((l) => `<option value="${esc(l.id)}"${l.id === sel ? " selected" : ""}>${esc(l.champion)} · ${esc(l.name.replace(/^.*?,\s*/, ""))}</option>`).join("")}`;
-const toLocalInput = (iso) => { const d = iso ? new Date(iso) : new Date(); return new Date(d - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16); };
 const splitTags = (s) => [...new Set(String(s).split(",").map((t) => t.trim()).filter(Boolean))];
-const KINDS = ["conquer", "hold", "extra"];
+// the colour of a legend's game or deck: its domains
+const domainStyle = (c) => { const d = (c?.domains || []).map((x) => `var(--${x.toLowerCase()})`); return d.length ? `--c1:${d[0]};--c2:${d[1] || d[0]}` : ""; };
+const reducedMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+// change the page inside a view transition where the browser has them
+const smoothly = (change) => { if (document.startViewTransition && !reducedMotion()) return document.startViewTransition(change); change(); return null; };
 
-// The dialog to log a match or change one. m: the match (or {deck, …} for a new one); done(id|null) after save or delete.
-function matchDialog(m, done = () => {}) {
-  let dlg = document.getElementById("match-dlg");
-  if (!dlg) {
-    dlg = document.createElement("dialog");
-    dlg.id = "match-dlg";
-    dlg.className = "form-dlg";
-    document.body.append(dlg);
-    dlg.addEventListener("click", (e) => { if (e.target === dlg) dlg.close(); });
-  }
-  const decks = LIB.decks().filter((d) => d.status !== "archived" || d.id === m.deck).sort((a, b) => STATUSES.indexOf(a.status) - STATUSES.indexOf(b.status) || a.name.localeCompare(b.name));
-  const versions = m.deck ? LIB.versions(m.deck) : [];
-  const side = (who) => KINDS.map((k) => `<label>${k}<input type="number" min="0" max="30" name="${who}-${k}" value="${m[who]?.[k] ?? 0}"></label>`).join("");
-  dlg.innerHTML = `
-    <form method="dialog">
-      <h2>${m.id ? "Match" : "Log a match"} <button type="button" class="x" aria-label="Close">✕</button></h2>
-      ${m.source === "tts" ? `<p class="note">From the Tabletop Simulator table.</p>` : ""}
-      <div class="grid2">
-        <label>Deck <select name="deck">${decks.map((d) => `<option value="${esc(d.id)}"${d.id === m.deck ? " selected" : ""}>${esc(d.name)}</option>`).join("")}</select></label>
-        <label>Version <select name="deckver">${versions.map((v) => `<option value="${esc(v.id)}"${v.id === (m.deckver || LIB.deck(m.deck)?.version) ? " selected" : ""}>v${v.n} · ${day(v.created)}</option>`).join("") || "<option value=''>–</option>"}</select></label>
-        <label>Opponent's legend <select name="oppLegend">${legendOptions(cardIdOf(m.oppLegend))}</select></label>
-        <label>Opponent <input name="oppName" value="${esc(m.oppName)}" placeholder="name"></label>
-        <label>When <input type="datetime-local" name="date" value="${toLocalInput(m.date)}"></label>
-        <label>Event <input name="event" value="${esc(m.event)}" placeholder="e.g. Nexus Night, testing"></label>
-      </div>
-      <fieldset class="seg"><legend>Result</legend>${["win", "loss", "draw"].map((r) => `<label><input type="radio" name="result" value="${r}"${m.result === r ? " checked" : ""}>${r}</label>`).join("")}</fieldset>
-      <fieldset class="seg"><legend>I went</legend>${[["first", "true"], ["second", "false"], ["?", ""]].map(([l, v]) => `<label><input type="radio" name="first" value="${v}"${String(m.first ?? "") === v ? " checked" : ""}>${l}</label>`).join("")}
-        <label class="game">game <select name="game">${["", 1, 2, 3].map((g) => `<option${g === (m.game ?? "") ? " selected" : ""}>${g}</option>`).join("")}</select></label></fieldset>
-      <div class="score"><div><b>Me</b>${side("me")}</div><div><b>Opponent</b>${side("opp")}</div></div>
-      <label>Tags <input name="tags" value="${esc((m.tags || []).join(", "))}" placeholder="comma separated, e.g. mulligan, misplay"></label>
-      <label>Notes <textarea name="notes" rows="5" placeholder="How did it go?">${esc(m.notes)}</textarea></label>
-      ${m.oppList ? `<details><summary>Opponent's list</summary><pre>${esc(listText(m.oppList))}</pre></details>` : ""}
-      <div class="row">${m.id ? `<button type="button" class="del">Delete</button>` : ""}<span class="grow"></span><button type="submit" class="primary">Save</button></div>
-    </form>`;
-  const f = dlg.querySelector("form");
-  f.deck.onchange = () => {
-    const vs = LIB.versions(f.deck.value), cur = LIB.deck(f.deck.value)?.version;
-    f.deckver.innerHTML = vs.map((v) => `<option value="${esc(v.id)}"${v.id === cur ? " selected" : ""}>v${v.n} · ${day(v.created)}</option>`).join("");
-  };
-  dlg.querySelector(".x").onclick = () => dlg.close();
-  const del = dlg.querySelector(".del");
-  if (del) del.onclick = () => { if (confirm("Delete this match?")) { LIB.removeMatch(m.id); dlg.close(); done(null); } };
-  f.onsubmit = (e) => {
-    e.preventDefault();
-    const num = (k) => Math.max(0, parseInt(f[k].value) || 0);
-    const fields = {
-      deck: f.deck.value, deckver: f.deckver.value || null, oppLegend: f.oppLegend.value || null, oppName: f.oppName.value.trim(),
-      date: new Date(f.date.value).toISOString(), event: f.event.value.trim(), result: f.result.value || null,
-      first: f.first.value === "" ? null : f.first.value === "true", game: f.game.value ? +f.game.value : null,
-      me: Object.fromEntries(KINDS.map((k) => [k, num(`me-${k}`)])), opp: Object.fromEntries(KINDS.map((k) => [k, num(`opp-${k}`)])),
-      tags: splitTags(f.tags.value), notes: f.notes.value, needsNotes: false,
-    };
-    const id = LIB.saveMatch(m.id, fields);
-    dlg.close();
-    done(id);
-  };
-  dlg.showModal();
+function sheet({ title = "", cls = "", html = "", onClose } = {}) {
+  const d = document.createElement("dialog");
+  d.className = `sheet ${cls}`;
+  d.innerHTML = `<div class="sheet-head"><h2 tabindex="-1" autofocus>${esc(title)}</h2><button type="button" class="icon-btn x" aria-label="Close">✕</button></div><div class="sheet-body">${html}</div>`;
+  document.body.append(d);
+  $(".x", d).onclick = () => d.close();
+  d.addEventListener("click", (e) => { if (e.target === d) d.close(); }); // the backdrop
+  d.addEventListener("close", (e) => { if (e.target !== d) return; d.remove(); onClose?.(); });
+  d.showModal();
+  return d;
 }
+
+function ask(text, { yes = "OK", no = "Cancel", danger = false } = {}) {
+  return new Promise((done) => {
+    let answer = false;
+    const d = sheet({ title: yes, cls: "ask", html: `<p>${esc(text)}</p><div class="row end"><button type="button" class="btn text no">${esc(no)}</button><button type="button" class="btn ${danger ? "danger" : "filled"} yes">${esc(yes)}</button></div>`, onClose: () => done(answer) });
+    $(".no", d).onclick = () => d.close();
+    $(".yes", d).onclick = () => { answer = true; d.close(); };
+    $(".yes", d).focus();
+  });
+}
+
+let toastTimer;
+function toast(text, { undo } = {}) {
+  $("#toast")?.remove();
+  clearTimeout(toastTimer);
+  const t = document.createElement("div");
+  t.id = "toast";
+  t.setAttribute("role", "status");
+  t.innerHTML = `<span>${esc(text)}</span>${undo ? `<button type="button">Undo</button>` : ""}`;
+  // inside the open sheet, or it would lie under its backdrop
+  ([...document.querySelectorAll("dialog[open]")].at(-1) || document.body).append(t);
+  if (undo) $("button", t).onclick = () => { t.remove(); undo(); };
+  toastTimer = setTimeout(() => t.remove(), undo ? 6000 : 3000);
+}
+
+const stepper = (name, value, { min = 0, max = 99, label = name } = {}) =>
+  `<span class="stepper"><button type="button" data-step="-1" aria-label="${esc(label)}: one less">−</button><input type="number" inputmode="numeric" name="${esc(name)}" value="${esc(value)}" min="${min}" max="${max}" aria-label="${esc(label)}"><button type="button" data-step="1" aria-label="${esc(label)}: one more">+</button></span>`;
+
+const seg = (legend, name, options, current) => `<fieldset class="seg"><legend>${esc(legend)}</legend><div>${options.map(([v, l]) =>
+  `<label><input type="radio" name="${esc(name)}" value="${esc(v)}"${String(current ?? "") === String(v) ? " checked" : ""}><span>${esc(l)}</span></label>`).join("")}</div></fieldset>`;
+
+const fillChips = (name, values) => values.length ? `<div class="chips">${values.map((v) => `<button type="button" class="chip-btn" data-fill="${esc(name)}" data-v="${esc(v)}">${esc(v)}</button>`).join("")}</div>` : "";
+
+const tagChip = (t, on) => `<button type="button" class="chip-btn" data-tag="${esc(t)}" aria-pressed="${on}">${esc(t)}</button>`;
+function tagInput(name, values, known = []) {
+  const all = [...new Set([...values, ...known])];
+  return `<div class="tag-input"><input type="hidden" name="${esc(name)}" value="${esc(values.join(", "))}"><div class="chips">${all.map((t) => tagChip(t, values.includes(t))).join("")}<input class="tag-new" placeholder="add a tag" enterkeyhint="done" autocomplete="off" aria-label="Add a tag"></div></div>`;
+}
+function writeTags(box) {
+  const h = $("input[type=hidden]", box);
+  h.value = [...box.querySelectorAll('[aria-pressed="true"]')].map((b) => b.dataset.tag).join(", ");
+  h.dispatchEvent(new Event("change", { bubbles: true }));
+}
+function addTag(input) {
+  const box = input.closest(".tag-input");
+  for (const t of splitTags(input.value)) {
+    const old = [...box.querySelectorAll("[data-tag]")].find((b) => b.dataset.tag.toLowerCase() === t.toLowerCase());
+    if (old) old.setAttribute("aria-pressed", "true");
+    else input.insertAdjacentHTML("beforebegin", tagChip(t, true));
+  }
+  input.value = "";
+  writeTags(box);
+}
+
+document.addEventListener("click", (e) => {
+  const step = e.target.closest(".stepper [data-step]");
+  if (step) {
+    const i = $("input", step.parentNode);
+    i.value = Math.min(+i.max, Math.max(+i.min, (parseInt(i.value) || 0) + Number(step.dataset.step)));
+    i.dispatchEvent(new Event("change", { bubbles: true }));
+    return;
+  }
+  const fill = e.target.closest("[data-fill]");
+  if (fill) { const i = fill.closest("form").elements[fill.dataset.fill]; i.value = fill.dataset.v; i.dispatchEvent(new Event("change", { bubbles: true })); return; }
+  const tag = e.target.closest(".tag-input [data-tag]");
+  if (tag) { tag.setAttribute("aria-pressed", tag.getAttribute("aria-pressed") !== "true"); writeTags(tag.closest(".tag-input")); }
+});
+document.addEventListener("keydown", (e) => {
+  if (e.target.matches?.(".tag-new") && (e.key === "Enter" || e.key === ",")) { e.preventDefault(); if (e.target.value.trim()) addTag(e.target); }
+}, true);
+// a tag typed but not confirmed counts too (before the form's own submit handler reads it)
+document.addEventListener("focusout", (e) => { if (e.target.matches?.(".tag-new") && e.target.value.trim()) addTag(e.target); });

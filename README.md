@@ -19,11 +19,11 @@ Radiance and the Nexus Night/Worlds printings).
 
 ## Searching
 
-Press `/` to focus the search; the `?` button has the full cheat sheet. The query is in the URL, so searches can be bookmarked.
+Press `/` to focus the search; **⋯ → Search syntax** is the full cheat sheet. The query is in the URL, so searches can be bookmarked.
 
 The filter bar under the search has the everyday filters as the game's symbols: domains (any of / all of / within),
 energy, type, rarity, plus legend (`for:`), keyword, set, sort and grouping. It only writes terms into the query
-(`d:fury|chaos e:2|3 t:unit`), so a click is a start you can keep typing on; **Filters** hides it.
+(`d:fury|chaos e:2|3 t:unit`), so a click is a start you can keep typing on; **Filters** hides it. The **⋯** menu has the list view, export and the syntax.
 
 | query | gives |
 |---|---|
@@ -51,12 +51,12 @@ keyword shows its reminder text.
 By default reprints, alternate arts, overnumbered, signature and metal prints of a card are folded into one entry
 (the details show them all). A query is judged per printing, and the entry shows the first printing that matched.
 
-**Export** (in the header) copies the results as names, as printing ids, or as a link that brings back exactly
+**Export** (in the ⋯ menu) copies the results as names, as printing ids, or as a link that brings back exactly
 this list (`id=OGN-275|SFD-207 …`), or downloads them as a CSV. A card's champion is the champion's tag; legends and units are linked by name.
 
 ## Goldfish
 
-`goldfish.html` (the **Goldfish** link in the header, rb.raumi.dev/search/goldfish.html): paste a deck (a Piltover deck
+`goldfish.html` (**Goldfish** on the Decks page or a deck, rb.raumi.dev/search/goldfish.html): paste a deck (a Piltover deck
 code, or `2 Name` lines with or without `Legend:` `Champion:` `MainDeck:` `Battlefields:` `Runes:` headers) and it plays
 the deck alone 20 000 times, no opponent and **no card text**. It shows per turn:
 
@@ -78,10 +78,10 @@ in the same turn.
 
 ## Collection
 
-On the search page, **Collection** shows every printing on its own with − count + (on the tile, in the list, and per printing
-in the card dialog); the ones you don't have are dimmed. Hover a card and press `+` or `−`. The search knows your collection:
+`collection.html`: how full each set is, and a set's binder with − count + on every printing (All, Owned, Missing; hover a card and
+press `+` or `−`). The search shows a badge on cards you have, counts per printing in the card dialog, and knows your collection:
 `own>=3` (copies in any printing), `own:0`, `ownp>=1 is:alt` (the alt arts you have), `is:owned`, `is:missing`, `sort:-own`, and
-the CSV export has an `own` column.
+the CSV export has an `own` column. **Add cards**:
 
 - **Scan**: on a phone, hold cards into the frame one after another. It reads the collector line (`OGN • 030a/298`: the
   set comes from the set's size, the letters read badly) and compares the card's art with the printing's picture, so a misread
@@ -91,8 +91,8 @@ the CSV export has an `own` column.
   [Tesseract.js](https://github.com/naptha/tesseract.js), loaded the first time you scan and kept for offline use.
   `scanDebug: true` in `web/settings.js` shows what each frame read.
 - **Quick entry**: `ogn 42`, `OGN-042a x2`, `3x sfd 7`, `sfd r01 -1`, then a number alone for the same set.
-- **Paste list…**: quick entries, printing ids, `3 Name` lines, a CSV with an `id` and an `own`/`count` column (this page's
-  export), or a deck code; add to what you have or set the counts, with a preview.
+- **Paste a list**: quick entries, printing ids, `3 Name` lines, a CSV with an `id` and an `own`/`count` column (this page's
+  export), or a deck code; add to what you have or replace the counts, with a preview and undo.
 
 ## Decks and games
 
@@ -102,9 +102,10 @@ Per deck: the list with what you're missing, notes, tags, the record going first
 and its games (filter by version, opponent, first/second, tag). Copy the deck code (for Piltover Archive or the table) or the
 list, or goldfish it.
 
-`play.html` counts a game: both sides' points split into **conquer**, **hold** and **extra**, turns, undo, best of 1 or 3, the
-opponent's half turned to face them (⇅) if the phone lies between you; the screen stays on. At 8 (`playTarget`) it asks for
-the result, tags and notes and saves the game to the deck's current version. A game played elsewhere can be logged by hand.
+`play.html` counts a game: pick the deck and the opposing legend by picture, then both sides' points split into **conquer**, **hold**
+and **extra** (tap adds one, holding takes one off), turns, undo, best of 1 or 3, the opponent's half turned to face them (⇅) if the
+phone lies between you; the screen stays on. At 8 (`playTarget`) **Finish** asks for the result, tags and notes and saves the game
+to the deck's current version. A game played elsewhere can be logged by hand. While a game runs, a bar on the other pages leads back to it.
 
 ## Sync
 
@@ -115,12 +116,18 @@ connection; the newest edit of a record wins.
 The server is `server.py` (standard library and SQLite only), for you and a few friends, each with their own records:
 
 ```sh
-python3 server.py --db rb.sqlite adduser NAME     # asks for a password; there is no sign-up
+python3 server.py --db rb.sqlite adduser NAME     # asks for a password; nopasswd and revoke: see --help
 python3 server.py --db rb.sqlite serve --port 8080 [--proxy]
 ```
 
 The page talks to `syncServer` in `web/settings.js` (https://rb-api.raumi.dev), or the one typed in the login dialog. CORS
 allows `RB_ORIGINS` (default https://rb.raumi.dev), localhost and pages opened from disk.
+
+**Passkeys**: with an OpenID provider ([Pocket ID](https://pocket-id.org)) the page offers "Continue with passkey". The server is
+the client (authorization code, PKCE): `RB_OIDC_ISSUER`, `RB_OIDC_CLIENT_ID`, `RB_OIDC_CLIENT_SECRET`, `RB_PUBLIC_URL`, callback
+`<RB_PUBLIC_URL>/oidc/callback`, and `RB_OIDC_INTERNAL` if the provider has a private address. The ID token's signature isn't checked
+because it comes straight from the token endpoint: reach that over HTTPS or a private network only. An existing account adds its
+passkey while logged in; anyone else the provider lets in gets a new account. A page opened from disk has only the password.
 
 ## Tabletop Simulator
 
@@ -145,9 +152,11 @@ folding, hiding tokens/runes, domain order, the sync server, the points to win, 
 - `web/sim.js`: the goldfish simulator (no DOM); `web/goldfish.html`, `web/goldfish.js`: its page
 - `web/store.js`, `web/sync.js`: the records in the browser and their sync; `web/account.js`: the account button
 - `web/collection.js`: collection counts, quick entry, pasted lists; `web/scan.js`: scanning
-- `web/library.js`: decks, versions, games, records, the game being played (no DOM); `web/ui.js`: the match dialog
+- `web/library.js`: decks, versions, games, records, the game being played (no DOM); `web/match.js`: the legend picker, the game sheet
+- `web/ui.js`: sheets, steppers, chips, toasts; `web/shell.js`: the running game's bar; `web/cardview.js`: tiles, the card dialog
+- `web/collection.html`, `web/collection-page.js`: the Collection page; `web/login.html`, `web/login.js`: where a passkey login returns
 - `web/decks.html`, `web/decks.js`, `web/play.html`, `web/play.js`: the Decks and Play pages
-- `web/app.js`: rendering, filter bar, card dialog, collection mode
+- `web/app.js`: the search page: rendering, filter bar
 - `web/sw.js`, `web/manifest.webmanifest`: offline use and installing as an app
 - `test/`: the page's code on the real cards, `node --test test/*.test.mjs`, and the server, `python3 -m unittest discover test`
   (both run before every deploy)

@@ -2,35 +2,44 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Riftbound cards</title>
 <link rel="stylesheet" href="style.css">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/app-192.png">
 <link rel="apple-touch-icon" href="icons/app-192.png">
 <meta name="theme-color" content="#181825">
+<script type="speculationrules">{"prefetch":[{"where":{"selector_matches":"nav.pages a"},"eagerness":"moderate"}]}</script>
 </head>
-<body data-view="grid">
+<body data-page="cards" data-view="grid">
 <header>
-  <nav class="pages"><a href="./" aria-current="page">Cards</a><a href="decks.html">Decks</a><a href="play.html">Play</a><a href="goldfish.html">Goldfish</a></nav>
-  <input id="q" type="search" placeholder='Search…  e.g. group:champion   d:fury e<=3 kw:accelerate   o:"when you conquer" sort:-might' autofocus spellcheck="false" autocomplete="off">
+  <nav class="pages" aria-label="Pages"><a href="./" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="3" width="10" height="15" rx="2"/><path d="M17 6l3 1-3.5 13-7-2"/></svg><span>Cards</span></a><a href="collection.html"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14v16H5zM9 4v16M12 9h4M12 13h4"/></svg><span>Collection</span></a><a href="decks.html"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l9 5-9 5-9-5zM3 12l9 5 9-5M3 16l9 5 9-5"/></svg><span>Decks</span></a><a href="play.html"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M10 8.5l6 3.5-6 3.5z"/></svg><span>Play</span></a></nav>
+  <input id="q" type="search" placeholder="Search cards, e.g. d:fury e&lt;=3" aria-label="Search" autofocus spellcheck="false" autocomplete="off">
   <ul id="suggest" role="listbox" hidden></ul>
   <span id="count"></span>
-  <button id="collect" title="Collection mode: every printing with − count +, quick entry, paste a list" aria-pressed="false">Collection</button>
-  <button id="filter-toggle" title="Show / hide the filters">Filters</button>
-  <button id="view" title="Grid / list">☰</button>
-  <details id="export">
-    <summary title="Export the results">Export</summary>
+  <button id="filter-toggle" class="btn tonal" title="Show / hide the filters">Filters</button>
+  <details id="export" class="more">
+    <summary class="icon-btn" aria-label="More: view, export, help" title="More">⋯</summary>
     <div class="menu">
+      <button type="button" id="view">List view</button>
+      <button type="button" id="help-open">Search syntax</button>
+      <hr>
       <button type="button" data-export="names">Copy names</button>
       <button type="button" data-export="ids">Copy printing ids</button>
       <button type="button" data-export="link">Copy link to this list</button>
       <button type="button" data-export="csv">Download CSV</button>
     </div>
   </details>
-  <details id="help">
-    <summary title="Search syntax">?</summary>
-    <div class="cheat">
+</header>
+<div id="filters"></div>
+<div id="chips"></div>
+<main id="results"></main>
+<footer>
+  <p id="synced"></p>
+  <p>Card data and images via <a href="https://piltoverarchive.com">Piltover Archive</a>. Source on <a href="https://github.com/raumi-verse/riftbound">GitHub</a>.</p>
+  <p class="legal">Riftbound card search isn't endorsed by Riot Games and doesn't reflect the views or opinions of Riot Games or anyone officially involved in producing or managing Riot Games properties. Riot Games, Riftbound, League of Legends and all associated properties are trademarks or registered trademarks of Riot Games, Inc.</p>
+</footer>
+<dialog id="help" class="sheet wide"><div class="sheet-head"><h2>Search syntax</h2><button type="button" class="icon-btn x" aria-label="Close">✕</button></div><div class="sheet-body cheat">
       <p>Words search the name and rules text. <code>"exact phrase"</code>, <code>/regex/</code>. Terms are ANDed;
         <code>or</code>, <code>( )</code> and a leading <code>-</code> (not) combine them.</p>
       <table>
@@ -57,49 +66,19 @@
         <code>/</code> focuses the search. In the list, click a column to sort by it, shift-click to add it as the next key.
         <b>Export</b> copies the results' names, printing ids or a link to exactly this list, or downloads them as CSV.
         Defaults are in <code>web/settings.js</code>.</p>
-    </div>
-  </details>
-</header>
-<div id="collect-bar">
-  <input id="entry" type="text" placeholder="Add: ogn 42 · OGN-042a x2 · 3x sfd 7 · 42 (same set) · -ogn 42 removes" spellcheck="false" autocomplete="off" enterkeyhint="done">
-  <div id="entry-out"></div>
-  <span id="own-total"></span>
-  <button type="button" id="scan-open" title="Scan cards with the camera">Scan</button>
-  <button type="button" id="import-open" title="Paste a list, a CSV or a deck code">Paste list…</button>
-</div>
-<div id="filters"></div>
-<div id="chips"></div>
-<main id="results"></main>
-<footer>
-  <p id="synced"></p>
-  <p>Card data and images via <a href="https://piltoverarchive.com">Piltover Archive</a>. Source on <a href="https://github.com/raumi-verse/riftbound">GitHub</a>.</p>
-  <p class="legal">Riftbound card search isn't endorsed by Riot Games and doesn't reflect the views or opinions of Riot Games or anyone officially involved in producing or managing Riot Games properties. Riot Games, Riftbound, League of Legends and all associated properties are trademarks or registered trademarks of Riot Games, Inc.</p>
-</footer>
-<dialog id="scan" class="scan">
-  <div class="cam"><video playsinline muted></video><div class="guide"><span class="line"></span></div><p class="hint"></p>
-    <div class="tools"><button type="button" class="torch" hidden title="Light">💡</button><label class="photo" title="Read a photo instead">📷<input type="file" accept="image/*" hidden></label><button type="button" class="close" title="Close">✕</button></div></div>
-  <form class="manual"><input placeholder="or type: ogn 42, OGN-042a, 42 (same set)" spellcheck="false" autocomplete="off" enterkeyhint="done"><button>Add</button></form>
-  <div class="row"><b class="count"></b><button type="button" class="clear">Clear</button><button type="button" class="addall" disabled>Add all to the collection</button></div>
-  <ul class="tally"></ul>
-</dialog>
-<dialog id="import" class="imp">
-  <h2>Paste a list <button type="button" class="close" aria-label="Close">✕</button></h2>
-  <p class="note">One per line: <code>ogn 42 3</code>, <code>OGN-042a</code>, <code>3 Jinx, Demolitionist</code> (its first printing), <code>1 Jinx, Demolitionist (OGN-030a)</code>;
-    a CSV with an <code>id</code> column and <code>own</code> or <code>count</code> (this page's Export); or a deck code (one of each card in it).</p>
-  <textarea rows="8" spellcheck="false" autocomplete="off"></textarea>
-  <div class="row"><select><option value="add">add to what I have</option><option value="set">set to these counts</option></select><button type="button" class="apply" disabled>Apply</button></div>
-  <div class="pv"></div>
-</dialog>
+</div></dialog>
 <dialog id="detail"><div class="big"></div><div class="info"></div></dialog>
 <script src="settings.js"></script>
+<script src="ui.js"></script>
 <script src="cards.js"></script>
 <script src="store.js"></script>
 <script src="sync.js"></script>
 <script src="query.js"></script>
 <script src="deck.js"></script>
 <script src="collection.js"></script>
-<script src="scan.js"></script>
+<script src="cardview.js"></script>
 <script src="app.js"></script>
+<script src="shell.js"></script>
 <script src="account.js"></script>
 </body>
 </html>

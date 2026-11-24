@@ -2,8 +2,6 @@
 // The goldfish page: read the deck, run sim.js, show the tables. The deck is kept in the URL (#…) so it can be
 // bookmarked or shared.
 
-const $ = (s) => document.querySelector(s);
-const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 const pct = (x) => `${Math.round(x * 100)}%`;
 const num = (x) => x.toFixed(1);
 // a percentage cell shaded by its value
@@ -78,5 +76,3 @@ $("#order").addEventListener("change", () => run(false));
 const fromHash = () => { $("#deck").value = decodeURIComponent(location.hash.slice(1)); run(false); };
 window.addEventListener("hashchange", fromHash);
 if (location.hash.length > 1) fromHash();
-
-if ("serviceWorker" in navigator && location.protocol.startsWith("http")) navigator.serviceWorker.register("sw.js");

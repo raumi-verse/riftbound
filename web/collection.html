@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Riftbound collection</title>
+<link rel="stylesheet" href="style.css">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/app-192.png">
+<link rel="apple-touch-icon" href="icons/app-192.png">
+<meta name="theme-color" content="#181825">
+<script type="speculationrules">{"prefetch":[{"where":{"selector_matches":"nav.pages a"},"eagerness":"moderate"}]}</script>
+</head>
+<body data-page="collection" data-view="grid">
+<header>
+  <nav class="pages" aria-label="Pages"><a href="./"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="3" width="10" height="15" rx="2"/><path d="M17 6l3 1-3.5 13-7-2"/></svg><span>Cards</span></a><a href="collection.html" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14v16H5zM9 4v16M12 9h4M12 13h4"/></svg><span>Collection</span></a><a href="decks.html"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l9 5-9 5-9-5zM3 12l9 5 9-5M3 16l9 5 9-5"/></svg><span>Decks</span></a><a href="play.html"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M10 8.5l6 3.5-6 3.5z"/></svg><span>Play</span></a></nav>
+  <h1>Collection</h1>
+  <button type="button" id="add" class="btn filled">＋ Add cards</button>
+</header>
+<main class="coll">
+  <div class="totals" id="totals"></div>
+  <div class="sets" id="sets" aria-label="Sets"></div>
+  <div class="binder-bar">
+    <input id="name" type="search" placeholder="Find a card in every set" aria-label="Find a card" autocomplete="off" spellcheck="false">
+    <form id="show-form"><fieldset class='seg'><legend class='sr'>Show</legend><div><label><input type='radio' name='show' value='all'><span>All</span></label><label><input type='radio' name='show' value='owned'><span>Owned</span></label><label><input type='radio' name='show' value='missing'><span>Missing</span></label></div></fieldset></form>
+  </div>
+  <div id="results"></div>
+</main>
+<footer>
+  <p id="synced"></p>
+  <p>Card data and images via <a href="https://piltoverarchive.com">Piltover Archive</a>. Source on <a href="https://github.com/raumi-verse/riftbound">GitHub</a>.</p>
+  <p class="legal">Riftbound card search isn't endorsed by Riot Games and doesn't reflect the views or opinions of Riot Games or anyone officially involved in producing or managing Riot Games properties. Riot Games, Riftbound, League of Legends and all associated properties are trademarks or registered trademarks of Riot Games, Inc.</p>
+</footer>
+<dialog id="scan" class="scan">
+  <div class="cam"><video playsinline muted></video><div class="guide"><span class="line"></span></div><p class="hint"></p>
+    <div class="tools"><button type="button" class="torch" hidden title="Light" aria-label="Light">💡</button><label class="photo" title="Read a photo instead">📷<input type="file" accept="image/*" hidden></label><button type="button" class="close" title="Close">✕</button></div></div>
+  <form class="manual"><input class="mono" placeholder="or type: ogn 42, OGN-042a, 42 (same set)" spellcheck="false" autocomplete="off" enterkeyhint="done"><button class="btn tonal">Add</button></form>
+  <div class="row"><b class="count"></b><button type="button" class="btn text clear">Clear</button><button type="button" class="btn filled addall" disabled>Add all</button></div>
+  <ul class="tally"></ul>
+</dialog>
+<dialog id="detail"><div class="big"></div><div class="info"></div></dialog>
+<script src="settings.js"></script>
+<script src="ui.js"></script>
+<script src="cards.js"></script>
+<script src="store.js"></script>
+<script src="sync.js"></script>
+<script src="query.js"></script>
+<script src="deck.js"></script>
+<script src="collection.js"></script>
+<script src="scan.js"></script>
+<script src="cardview.js"></script>
+<script src="collection-page.js"></script>
+<script src="shell.js"></script>
+<script src="account.js"></script>
+</body>
+</html>

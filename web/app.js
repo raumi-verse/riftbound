@@ -1,87 +1,10 @@
 "use strict";
-// The page: rendering, filter bar, card dialog, wiring. The query engine is query.js.
+// The search page: results, filter bar, suggestions, wiring. The query engine is query.js, tiles and the card dialog
+// are cardview.js, the collection has its own page (collection.html).
 
 // ---------- rendering ----------
 
-const $ = (s) => document.querySelector(s);
-const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 let view = localStorage.getItem("rb-view") || S.view;
-// collection mode: every printing on its own with − count + (the counts are in the store, see collection.js)
-let collecting = localStorage.getItem("rb-collect") === "on";
-
-// the game's symbols, in web/icons/ (sync.py downloads them)
-const icon = (file, alt, cls = "") => `<img class="ic${cls ? " " + cls : ""}" src="icons/${file}" alt="${esc(alt)}" title="${esc(alt)}">`;
-const cap = (s) => s[0].toUpperCase() + s.slice(1);
-const ICONS = {
-  domain: (d) => icon(`${d.toLowerCase()}.webp`, cap(d.toLowerCase())),
-  energy: (n) => icon(`${n}.svg`, `${n} energy`, "en"),
-  might: () => icon("might.webp", "Might"),
-  exhaust: () => icon("tap.webp", "Exhaust"),
-  rune: () => icon("rune.webp", "Any rune"),
-  type: (t) => ["legend", "unit", "spell", "gear", "battlefield", "rune"].includes(t.split(" ")[0].toLowerCase()) ? icon(`type-${t.split(" ")[0].toLowerCase()}.webp`, t, "ty") : "",
-  rarity: (r) => ["common", "uncommon", "rare", "epic", "showcase"].includes(r.toLowerCase()) ? icon(`rarity-${r.toLowerCase()}.webp`, r, "ra") : "",
-};
-// A keyword's reminder text: the most common "(…)" right after it on the cards, "assault 2" and "assault" apart
-const REMINDERS = (() => {
-  const counts = {};
-  for (const c of CARDS) for (const [, k, t] of c.alltext.matchAll(/\[([A-Za-z][A-Za-z -]*?(?: \d+)?)\] ?\(([^)]+)\)/g)) {
-    const key = k.toLowerCase(), text = t[0].toUpperCase() + t.slice(1);
-    ((counts[key] ??= {})[text] = (counts[key][text] || 0) + 1);
-  }
-  return Object.fromEntries(Object.entries(counts).map(([k, ts]) => [k, Object.entries(ts).sort((a, b) => b[1] - a[1])[0][0]]));
-})();
-
-// The reminder for a keyword on card r: none if the card prints it, else the usual one with its runes in the
-// card's domain (Accelerate costs a rune of the card's domain)
-function reminder(low, base, r) {
-  if (r && [...r.alltext.matchAll(/\[([A-Za-z][A-Za-z -]*?(?: \d+)?)\] ?\(/g)].some((m) => m[1].toLowerCase() === low)) return null;
-  const t = REMINDERS[low] || REMINDERS[base];
-  if (!t || !r) return t;
-  return t.replace(/:rb_rune_(?!rainbow)\w+:/g, r.domains.length === 1 ? `:rb_rune_${r.domains[0].toLowerCase()}:` : ":rb_rune_rainbow:");
-}
-// [Assault 2]: its own banner, else the [Assault] banner and the number, else bold text; hover or focus shows
-// the reminder text. r: the card (for its reminders); null for no tooltips.
-function keywordBadge(k, r) {
-  const low = k.toLowerCase(), [, base, n] = low.match(/^(.*?)(?: (\d+))?$/);
-  const tip = r !== null && reminder(low, base, r);
-  const title = tip ? "" : ` title="${esc(k)}"`;
-  const badge = KW_ICONS[low] ? `<img class="kwb" src="${KW_ICONS[low]}" alt="[${esc(k)}]"${title}>`
-    : KW_ICONS[base] ? `<img class="kwb" src="${KW_ICONS[base]}" alt="[${esc(k)}]"${title}><b class="kwn">${n}</b>`
-    : `<b class="kw">${esc(k)}</b>`;
-  return tip ? `<span class="kwt" tabindex="0">${badge}<span class="tip"><b>${esc(k)}</b> ${richText(tip, null)}</span></span>` : badge;
-}
-function richText(t, r) {
-  return esc(t)
-    .replace(/:rb_energy_(\d+):/g, (_, n) => ICONS.energy(n))
-    .replace(/:rb_might:/g, ICONS.might)
-    .replace(/:rb_exhaust:/g, ICONS.exhaust)
-    .replace(/:rb_rune_rainbow:/g, ICONS.rune)
-    .replace(/:rb_rune_(\w+):/g, (_, d) => ICONS.domain(d))
-    .replace(/\[(&gt;)+\]/g, "▶")
-    .replace(/\[([A-Za-z][A-Za-z -]*?(?: \d+)?)\]/g, (_, k) => keywordBadge(k, r))
-    .replace(/\n/g, "<br>");
-}
-
-const dots = (ds) => ds.map(ICONS.domain).join("");
-// power is paid in runes of the card's domain; with two domains the split isn't in the data
-const powerIcons = (r) => !r.power ? "" : r.domains.length === 1 ? ICONS.domain(r.domains[0]).repeat(r.power) : `${r.power}${ICONS.rune()}`;
-const cost = (r) => [r.energy != null ? ICONS.energy(r.energy) : "", powerIcons(r)].join("");
-const qlink = (q, text) => `<a href="#${encodeURIComponent(q)}">${esc(text)}</a>`;
-const quote = (s) => /\s/.test(s) ? `"${s}"` : s;
-
-function imgSrc(r) { return r.p.img || r.printings.find((p) => p.img)?.img; }
-// − n + for one printing; the buttons are spans because they sit inside the card's button
-const ownCtl = (id) => {
-  const n = COLL.n(id);
-  return `<span class="own${n ? "" : " none"}" data-own="${esc(id)}"><span role="button" tabindex="-1" data-d="-1" title="One less">−</span><b>${n}</b><span role="button" tabindex="-1" data-d="1" title="One more (hover and press +)">+</span></span>`;
-};
-
-function gridSection(rows) {
-  return `<div class="grid">${rows.map((r, i) => {
-    const src = imgSrc(r);
-    return `<button class="card${r.landscape ? " land" : ""}${collecting && !COLL.n(r.p.id) ? " unowned" : ""}" data-i="${i}" data-id="${esc(r.p.id)}" title="${esc(r.name)}">${src ? `<img loading="lazy" src="${esc(src)}" alt="${esc(r.name)}">` : `<span class="noimg">${esc(r.name)}</span>`}${r.printings.length > 1 && !r._exp ? `<span class="nprint">${r.printings.length}</span>` : ""}${collecting ? ownCtl(r.p.id) : ""}</button>`;
-  }).join("")}</div>`;
-}
 
 const COLS = [
   ["name", "Name"], ["champion", "Champion"], ["type", "Type"], ["domain", "Domains"],
@@ -89,7 +12,7 @@ const COLS = [
 ];
 function listSection(rows) {
   return `<table class="list"><thead><tr>${COLS.map(([k, l]) => `<th${k ? ` data-sort="${k}" title="click: sort by this, shift-click: add as next key"` : ""}>${l}</th>`).join("")}</tr></thead><tbody>${rows.map((r, i) => `<tr data-i="${i}" data-id="${esc(r.p.id)}">
-    <td class="nm">${collecting ? ownCtl(r.p.id) : ""}${esc(r.name)}${r.role != null ? ` <small class="role">${["L", "C", "S", ""][r.role]}</small>` : ""}</td>
+    <td class="nm">${esc(r.name)}${r.role != null ? ` <small class="role">${["L", "C", "S", ""][r.role]}</small>` : ""}</td>
     <td>${esc(r.champion || "")}</td>
     <td>${ICONS.type(r.type)} ${esc(r.type)}${r.supertype ? ` <small>${esc(r.supertype)}</small>` : ""}</td>
     <td>${dots(r.domains)}</td>
@@ -129,12 +52,11 @@ let current = null;
 function render() {
   const q = $("#q").value;
   syncFilters(q);
-  // collecting, each printing is its own entry (unless the query says show:)
-  const res = (current = run(collecting && !/(^|\s)show:/.test(q) ? `${q} show:printings` : q, view));
+  const res = (current = run(q, view));
   $("#chips").innerHTML = chips(res);
   $("#count").textContent = `${res.count} ${res.dirs.show?.startsWith("print") ? "printings" : "cards"}`;
   document.body.dataset.view = res.view;
-  $("#view").textContent = res.view === "grid" ? "☰" : "▦";
+  $("#view").textContent = res.view === "grid" ? "List view" : "Grid view";
   $("#results").innerHTML = res.sections.map((s, si) => {
     s.rows.forEach((r) => (r._exp = !!res.dirs.show));
     let body;
@@ -159,53 +81,12 @@ function step(delta) {
   const next = flat[k + delta];
   if (next) detail(...next);
 }
+onStep = step;
 function detail(si, i) {
   at = { si, i };
   const flat = current.sections.reduce((n, s, j) => n + (j < si ? s.rows.length : 0), 0) + i;
   showCard(current.sections[si].rows[i], `${flat + 1} / ${current.count}`);
 }
-const ROLE_SHORT = ["Legend", "Champion", "Signature"];
-function showCard(r, pos) {
-  const d = $("#detail");
-  const show = (p) => {
-    const img = p.img ? `<img src="${esc(p.img)}" alt="">` : "";
-    d.querySelector(".big").innerHTML = img && r.landscape ? `<span class="rot">${img}</span>` : img;
-    d.querySelectorAll(".pr").forEach((b) => b.classList.toggle("on", b.dataset.id === p.id + p.kind));
-  };
-  const stats = !HAS_STAT.energy(r) ? "" : [cost(r), /Unit/.test(r.type) && r.might != null ? `${ICONS.might()} ${r.might}` : ""].filter(Boolean).join(" · ");
-  d.querySelector(".info").innerHTML = `
-    <nav class="step"><button type="button" data-step="-1" title="Previous (←)">‹</button><span>${pos || ""}</span><button type="button" data-step="1" title="Next (→)">›</button><button type="button" class="close" title="Close (Esc)">✕</button></nav>
-    <h2>${esc(r.name)}</h2>
-    <p class="line">${dots(r.domains)} ${ICONS.type(r.type)} ${esc([r.supertype, r.type].filter(Boolean).join(" "))}${stats ? ` · ${stats}` : ""}</p>
-    ${r.banned ? `<p class="banned">Banned since ${esc(r.banned.slice(0, 10))}</p>` : ""}
-    <div class="tx">${richText(r.text, r)}</div>
-    ${r.flavour ? `<p class="flav">${esc(r.flavour)}</p>` : ""}
-    <p class="tags">${r.champion ? `Champion: ${qlink(`champ="${r.champion}" group:champion`, r.champion)} · ` : ""}${r.tags.filter((t) => t !== r.champion).map((t) => qlink(`tag="${t}"`, t)).join(", ")}</p>
-    ${r.type === "Legend" ? `<p class="tags">${qlink(`for:"${r.name}" group:type`, "Everything this legend's deck may play")}</p>` : ""}
-    ${sameChampion(r)}
-    <h3>Printings</h3>
-    <div class="prints">${r.printings.map((p) => `<div class="prw"><button class="pr" data-id="${esc(p.id + p.kind)}">${ICONS.rarity(p.rarity)} ${esc(p.set)} ${p.num ?? ""} · ${esc(p.rarity)}${p.kind ? ` · ${esc(p.kind)}` : ""}${p.artist ? `<small>${esc(p.artist)}</small>` : ""}</button>${ownCtl(p.id)}</div>`).join("")}</div>`;
-  d.querySelectorAll(".pr").forEach((b, i) => (b.onclick = () => show(r.printings[i])));
-  d.querySelectorAll(".same button").forEach((b) => (b.onclick = () => showCard(FOLDED.find((c) => c.id === b.dataset.id), "")));
-  d.querySelectorAll("[data-step]").forEach((b) => (b.onclick = () => step(Number(b.dataset.step))));
-  d.querySelector(".close").onclick = () => d.close();
-  d.querySelectorAll("a").forEach((a) => a.addEventListener("click", () => d.close()));
-  d.querySelector(".big").classList.toggle("land", !!r.landscape);
-  show(r.p);
-  if (!d.open) d.showModal();
-}
-// the champion's legend, units and signatures as small pictures
-function sameChampion(r) {
-  if (!r.champion) return "";
-  const others = FOLDED.filter((c) => c.champion === r.champion && c.role <= 2 && c.id !== r.id)
-    .sort(sorter("role,energy,name", []));
-  if (!others.length) return "";
-  return `<h3>${esc(r.champion)}</h3><div class="same">${others.map((c) => {
-    const src = imgSrc(c);
-    return `<button type="button" data-id="${esc(c.id)}" title="${esc(`${c.name} · ${ROLE_SHORT[c.role]}`)}"${c.landscape ? ' class="land"' : ""}>${src ? `<img loading="lazy" src="${esc(src)}" alt="${esc(c.name)}">` : esc(c.name)}</button>`;
-  }).join("")}</div>`;
-}
-
 // ---------- filter bar ----------
 
 const ENERGIES = ["0", "1", "2", "3", "4", "5", "6", "7+"];
@@ -298,6 +179,12 @@ $("#export .menu").addEventListener("click", async (e) => {
   } catch (err) { b.textContent = "Couldn't copy"; }
   setTimeout(() => { b.textContent = label; $("#export").open = false; }, 1200);
 });
+$("#help-open").onclick = () => { $("#export").open = false; $("#help").showModal(); };
+$("#help .x").onclick = () => $("#help").close();
+$("#help").addEventListener("click", (e) => { if (e.target.id === "help") e.target.close(); });
+// the ⋯ menu closes on a click elsewhere or Esc
+document.addEventListener("click", (e) => { if (!e.target.closest("#export")) $("#export").open = false; });
+$("#export").addEventListener("keydown", (e) => { if (e.key === "Escape") { $("#export").open = false; $("#export summary").focus(); } });
 $("#filter-toggle").addEventListener("click", () => {
   const hidden = document.body.toggleAttribute("data-nofilters");
   localStorage.setItem("rb-filters", hidden ? "off" : "on");
@@ -371,6 +258,7 @@ $("#q").addEventListener("keydown", (e) => { if (e.key === "Enter") { clearTimeo
 $("#view").addEventListener("click", () => {
   view = view === "grid" ? "list" : "grid";
   localStorage.setItem("rb-view", view);
+  $("#export").open = false;
   setQuery($("#q").value.replace(/(?:^|\s)view:\S*/, "").trim(), false);
 });
 $("#results").addEventListener("click", (e) => {
@@ -381,105 +269,12 @@ $("#results").addEventListener("click", (e) => {
   const s = el.closest("[data-s]").dataset.s;
   detail(Number(s), Number(el.dataset.i));
 });
-$("#detail").addEventListener("click", (e) => { if (e.target.id === "detail") e.target.close(); });
-$("#detail").addEventListener("keydown", (e) => {
-  if (e.key === "ArrowLeft" || e.key === "ArrowRight") { e.preventDefault(); step(e.key === "ArrowLeft" ? -1 : 1); }
-});
 window.addEventListener("hashchange", () => { $("#q").value = decodeURIComponent(location.hash.slice(1)); render(); });
 document.addEventListener("keydown", (e) => {
   if (e.key === "/" && document.activeElement !== $("#q")) { e.preventDefault(); $("#q").focus(); $("#q").select(); }
 });
 
 // ---------- the collection ----------
-
-// the counts on the page follow the store (this tab, another tab, another device)
-function showCounts() {
-  document.querySelectorAll("[data-own]").forEach((el) => {
-    const n = COLL.n(el.dataset.own);
-    el.querySelector("b").textContent = n;
-    el.classList.toggle("none", !n);
-    el.closest(".card")?.classList.toggle("unowned", collecting && !n);
-  });
-  const all = STORE.all("coll");
-  $("#own-total").textContent = `${all.reduce((n, r) => n + r.data.n, 0)} cards · ${new Set(all.map((r) => PRINTS.get(r.id.toUpperCase())?.card.id)).size} different`;
-}
-function setCollecting(on) {
-  collecting = on;
-  localStorage.setItem("rb-collect", on ? "on" : "off");
-  document.body.toggleAttribute("data-collect", on);
-  $("#collect").setAttribute("aria-pressed", on);
-  render();
-  showCounts();
-}
-$("#collect").addEventListener("click", () => setCollecting(!collecting));
-
-// − / + on a tile, a list row or a printing in the dialog
-document.addEventListener("click", (e) => {
-  const b = e.target.closest("[data-own] [data-d]");
-  if (!b) return;
-  e.preventDefault(); e.stopPropagation();
-  COLL.add(b.closest("[data-own]").dataset.own, Number(b.dataset.d));
-}, true);
-// hover a card and press + or −
-let hovered = null;
-$("#results").addEventListener("mouseover", (e) => { hovered = e.target.closest("[data-id]")?.dataset.id ?? null; });
-$("#results").addEventListener("mouseleave", () => { hovered = null; });
-document.addEventListener("keydown", (e) => {
-  if (!collecting || !hovered || e.target.closest("input, textarea, select") || e.ctrlKey || e.metaKey || e.altKey) return;
-  const d = { "+": 1, "=": 1, "-": -1, "_": -1 }[e.key];
-  if (d) { e.preventDefault(); COLL.add(hovered, d); }
-});
-
-// quick entry: one printing per Enter; a number alone reuses the last set
-let lastSet = null, lastEntry = null;
-function entryResult(e) {
-  const out = $("#entry-out");
-  if (e.error != null) { out.innerHTML = e.error ? `<span class="err">${esc(e.error)}</span>` : ""; return; }
-  const n = COLL.add(e.id, e.n);
-  lastSet = e.set;
-  lastEntry = e;
-  const src = e.p.img || imgSrc({ p: e.p, printings: e.card.printings });
-  out.innerHTML = `${src ? `<img src="${esc(src)}" alt="">` : ""}<span><b>${esc(e.card.name)}</b> <small>${esc(e.id)}${e.p.kind ? ` · ${esc(e.p.kind)}` : ""}</small><br>
-    ${e.n > 0 ? "+" : ""}${e.n} → you have <b>${n}</b></span><button type="button" class="undo">Undo</button>`;
-  out.querySelector(".undo").onclick = () => { COLL.add(lastEntry.id, -lastEntry.n); out.innerHTML = `<small>undone: ${esc(e.card.name)}</small>`; };
-}
-$("#entry").addEventListener("keydown", (e) => {
-  if (e.key !== "Enter") return;
-  e.preventDefault();
-  entryResult(parseEntry(e.target.value, lastSet));
-  if ($("#entry-out .err") == null) e.target.value = "";
-});
-
-// scanning with the camera (scan.js)
-const openScan = initScan((items) => { COLL.apply(items); $("#entry-out").innerHTML = `<span>Added ${items.reduce((n, i) => n + i.n, 0)} scanned cards.</span>`; });
-$("#scan-open").addEventListener("click", () => openScan());
-
-// pasting a list
-const imp = $("#import");
-let pasted = null;
-$("#import-open").addEventListener("click", () => { imp.showModal(); imp.querySelector("textarea").focus(); });
-imp.querySelector(".close").onclick = () => imp.close();
-imp.querySelector("textarea").addEventListener("input", () => { clearTimeout(imp.t); imp.t = setTimeout(preview, 250); });
-imp.querySelector("select").addEventListener("change", preview);
-function preview() {
-  pasted = parseBulk(imp.querySelector("textarea").value);
-  const set = imp.querySelector("select").value === "set";
-  const total = pasted.items.reduce((n, i) => n + i.n, 0);
-  imp.querySelector(".pv").innerHTML = (pasted.problems.length ? `<ul class="err">${pasted.problems.slice(0, 20).map((p) => `<li>${esc(p)}</li>`).join("")}${pasted.problems.length > 20 ? `<li>… ${pasted.problems.length - 20} more</li>` : ""}</ul>` : "")
-    + (pasted.items.length ? `<p>${pasted.items.length} printings, ${total} cards</p><table class="gf-table">${pasted.items.map((i) => {
-      const now = COLL.n(i.id), after = set ? i.n : now + i.n;
-      return `<tr><td class="n">${set ? "" : "+"}${i.n}</td><td>${esc(i.card.name)} <small>${esc(i.id)}</small></td><td class="n"><small>${now} → ${after}</small></td></tr>`;
-    }).join("")}</table>` : "");
-  imp.querySelector(".apply").disabled = !pasted.items.length;
-}
-imp.querySelector(".apply").onclick = () => {
-  if (!pasted?.items.length) return;
-  COLL.apply(pasted.items, imp.querySelector("select").value);
-  imp.close();
-  imp.querySelector("textarea").value = "";
-  $("#entry-out").innerHTML = `<span>Added ${pasted.items.length} printings from the list.</span>`;
-  pasted = null;
-};
 
 // the collection (store.js) for own:, ownp:, is:owned, is:missing and sort:own, kept up to date
 function loadOwned() { window.OWNED = new Map(STORE.all("coll").filter((r) => r.data.n > 0).map((r) => [r.id, r.data.n])); }
@@ -488,7 +283,11 @@ STORE.on((kinds) => {
   if (!kinds.has("coll")) return;
   loadOwned();
   if (/\bownp?[:=<>!]|is:(owned|missing)|sort:\S*own|order:\S*own/i.test($("#q").value)) render();
-  showCounts();
+  else document.querySelectorAll("#results .card").forEach((el) => {
+    const r = current.sections[el.closest("[data-s]").dataset.s].rows[el.dataset.i], b = $(".have", el), n = haveN(r);
+    if (b) b.remove();
+    if (n) el.insertAdjacentHTML("beforeend", haveBadge(n));
+  });
 });
 
 buildFilters();
@@ -497,10 +296,4 @@ const filtersDefault = S.showFilters === false || matchMedia("(max-width: 700px)
 if ((localStorage.getItem("rb-filters") || filtersDefault) === "off") document.body.setAttribute("data-nofilters", "");
 $("#synced").textContent = `${CARDS.length} cards · synced ${synced.slice(0, 10)}`;
 $("#q").value = decodeURIComponent(location.hash.slice(1));
-document.body.toggleAttribute("data-collect", collecting);
-$("#collect").setAttribute("aria-pressed", collecting);
 render();
-showCounts();
-
-// offline use on the website (sw.js); file:// has no service workers
-if ("serviceWorker" in navigator && location.protocol.startsWith("http")) navigator.serviceWorker.register("sw.js");

@@ -6,125 +6,161 @@
 const root = $("#play");
 const KEY_ID = "current";
 const getGame = () => STORE.get("game", KEY_ID);
-const setGame = (g) => (g ? STORE.put("game", KEY_ID, g) : STORE.del("game", KEY_ID));
-let ending = null; // the result being saved: {winner}
+const setGame = (g) => (g ? STORE.put("game", KEY_ID, g) : STORE.del("game", KEY_ID)); // the store's change draws it
+let ending = false; // the end sheet is open
+let saved = null; // the deck of the game (or series) just saved
 let faceToFace = (() => { try { return (localStorage.getItem("rb-face") ?? String(!!S.playFaceToFace)) === "true"; } catch { return !!S.playFaceToFace; } })();
 
 function render() {
   const g = getGame();
   document.body.classList.toggle("counting", !!g);
-  if (!g) return setup();
-  if (ending) return endScreen(g);
-  counter(g);
+  if (g) { saved = null; return counter(g); }
+  wake(false);
+  return saved ? afterSeries(saved) : setup();
 }
 
 // ---------- before a game ----------
 
 function setup() {
-  wake(false);
   const want = (location.hash.match(/deck=([^&]+)/) || [])[1];
-  const decks = LIB.decks().filter((d) => d.status !== "archived" || d.id === want)
-    .sort((a, b) => STATUSES.indexOf(a.status) - STATUSES.indexOf(b.status) || a.name.localeCompare(b.name));
+  const decks = decksToPick(want);
   let last = {};
   try { last = JSON.parse(localStorage.getItem("rb-play-last")) || {}; } catch { /* */ }
-  const sel = want || last.deck || decks[0]?.id;
-  root.innerHTML = `<form class="setup card-form">
+  const sel = [want, last.deck].find((id) => decks.some((d) => d.id === id)) || decks[0]?.id;
+  root.innerHTML = `<form class="setup fields">
     <h1>New game</h1>
-    ${decks.length ? "" : `<p class="note">No decks yet: make one on the <a href="decks.html">Decks</a> page first (a game is saved to its deck).</p>`}
-    <label>My deck <select name="deck" required>${decks.map((d) => `<option value="${esc(d.id)}"${d.id === sel ? " selected" : ""}>${d.status === "pinned" ? "★ " : ""}${esc(d.name)}</option>`).join("")}</select></label>
-    <label>Opponent's legend <select name="oppLegend">${legendOptions("")}</select></label>
-    <div class="grid2"><label>Opponent <input name="oppName" placeholder="name" value="${esc(last.oppName || "")}"></label>
-      <label>Event <input name="event" placeholder="e.g. Nexus Night" value="${esc(last.event || "")}"></label></div>
-    <fieldset class="seg"><legend>Who goes first</legend>
-      <label><input type="radio" name="first" value="true">me</label><label><input type="radio" name="first" value="false">them</label><label><input type="radio" name="first" value="" checked>?</label></fieldset>
-    <div class="grid2"><label>Points to win <input type="number" name="target" min="1" max="30" value="${S.playTarget || 8}"></label>
-      <label>Games <select name="bo"><option value="1">best of 1</option><option value="3"${last.bo === 3 ? " selected" : ""}>best of 3</option></select></label></div>
-    <div class="row"><button type="button" class="log">Log a game played elsewhere</button><span class="grow"></span><button class="primary big"${decks.length ? "" : " disabled"}>Start</button></div>
+    ${decks.length ? `<fieldset class="deck-row"><legend>My deck</legend><div>${decks.map((d) => {
+      const c = CARD_BY_ID.get(d.legend), r = record(LIB.matches(d.id));
+      return `<label class="deck-card" style="${domainStyle(c)}"><input type="radio" name="deck" value="${esc(d.id)}"${d.id === sel ? " checked" : ""}><span class="art" style="${artStyle(c)}"></span><b>${d.status === "pinned" ? "★ " : ""}${esc(d.name)}</b><small>${recordText(r)}</small></label>`;
+    }).join("")}</div></fieldset>` : `<p class="note">No decks yet: make one on the <a href="decks.html">Decks</a> page first (a game is saved to its deck).</p>`}
+    ${legendField("oppLegend", "")}
+    ${seg("Who goes first", "first", [["true", "Me"], ["false", "Them"], ["", "?"]], "")}
+    <details class="more-fields"><summary>More <small>opponent, event, points, best of</small></summary><div class="fields">
+      <div><label class="field"><span>Opponent</span><input name="oppName" placeholder="name" value="${esc(last.oppName || "")}" autocomplete="off"></label>${fillChips("oppName", usualNames())}</div>
+      <div><label class="field"><span>Event</span><input name="event" placeholder="e.g. Nexus Night" value="${esc(last.event || "")}" autocomplete="off"></label>${fillChips("event", usualEvents())}</div>
+      <div class="field"><span>Points to win</span>${stepper("target", S.playTarget || 8, { min: 1, max: 30, label: "Points to win" })}</div>
+      ${seg("Games", "bo", [[1, "Best of 1"], [3, "Best of 3"]], last.bo === 3 ? 3 : 1)}
+    </div></details>
+    <div class="row sticky"><button type="button" class="btn text log"${decks.length ? "" : " disabled"}>Log a past game</button><span class="grow"></span><button class="btn filled big"${decks.length ? "" : " disabled"}>Start</button></div>
   </form>`;
-  const f = root.querySelector("form");
-  f.querySelector(".log").onclick = () => f.deck.value && matchDialog({ deck: f.deck.value, deckver: LIB.deck(f.deck.value)?.version }, (id) => { if (id) location.href = `decks.html#d/${f.deck.value}`; });
+  const f = $("form", root);
+  $(".deck-row input:checked", root)?.closest("label").scrollIntoView({ block: "nearest", inline: "center" });
+  $(".log", f).onclick = () => matchDialog({ deck: f.elements.deck.value, deckver: LIB.deck(f.elements.deck.value)?.version, oppLegend: f.oppLegend.value }, (id) => { if (id) location.href = `decks.html#d/${STORE.get("match", id)?.deck || ""}`; });
   f.onsubmit = (e) => {
     e.preventDefault();
-    const o = { deck: f.deck.value, oppLegend: f.oppLegend.value, oppName: f.oppName.value.trim(), event: f.event.value.trim(),
+    const o = { deck: f.elements.deck.value, oppLegend: f.oppLegend.value, oppName: f.oppName.value.trim(), event: f.event.value.trim(),
       first: f.first.value === "" ? null : f.first.value === "true", target: +f.target.value || 8, bo: +f.bo.value };
     try { localStorage.setItem("rb-play-last", JSON.stringify({ deck: o.deck, oppName: o.oppName, event: o.event, bo: o.bo })); } catch { /* */ }
-    setGame(GAME.start(o));
-    render();
+    saved = null;
+    smoothly(() => setGame(GAME.start(o)));
   };
 }
 
 // ---------- the counter ----------
+// built once per game, then only its numbers change: a finger resting on one half keeps its button while the other
+// side scores
 
-const LABEL = { conquer: "Conquer", hold: "Hold", extra: "Extra" };
+let built = null;
+const sideOf = (g, who) => {
+  const deck = LIB.deck(g.deck), c = CARD_BY_ID.get(who === "me" ? deck?.legend : g.oppLegend);
+  return { c, name: who === "me" ? deck?.name || "Me" : g.oppName || c?.champion || "Opponent" };
+};
 function half(g, who) {
-  const s = g[who], total = GAME.total(g, who);
-  const name = who === "me" ? LIB.deck(g.deck)?.name || "Me" : g.oppName || legendName(g.oppLegend).replace(/,.*/, "") || "Opponent";
-  const legend = CARD_BY_ID.get(who === "me" ? LIB.deck(g.deck)?.legend : g.oppLegend);
-  return `<section class="side ${who}${GAME.winner(g) === who ? " won" : ""}" style="--p:${Math.min(1, total / g.target)}">
-    ${cardImg(legend) ? `<span class="bg" style="background-image:url('${esc(cardImg(legend))}')"></span>` : ""}
-    <div class="who">${esc(name)}${g.first != null && GAME.mine(g) === (who === "me") ? ` <span class="turnmark">${who === "me" ? "your" : "their"} turn</span>` : ""}</div>
-    <div class="total">${total}<small>/${g.target}</small></div>
-    <div class="parts">${KINDS.map((k) => `<span>${s[k]} ${k}</span>`).join(" · ")}</div>
-    <div class="btns">${KINDS.map((k) => `<button type="button" data-who="${who}" data-kind="${k}">+1 ${LABEL[k]}</button>`).join("")}</div>
+  const { c, name } = sideOf(g, who);
+  return `<section class="side ${who}" style="${domainStyle(c)}" aria-label="${esc(name)}">
+    ${cardImg(c) ? `<span class="bg" style="background-image:url('${esc(cardImg(c))}')"></span>` : ""}
+    <div class="who"><span>${esc(name)}</span><span class="turnmark" hidden>${who === "me" ? "your" : "their"} turn</span></div>
+    <div class="total" aria-live="polite"><span></span><small>/ ${g.target}</small></div>
+    <div class="progress"><i></i></div>
+    <div class="btns">${KINDS.map((k) => `<button type="button" data-who="${who}" data-kind="${k}" title="Tap: one more. Hold: one less."><b>+1</b><span>${KIND_LABEL[k]}</span><small></small></button>`).join("")}</div>
   </section>`;
 }
 function counter(g) {
   wake(true);
-  root.innerHTML = `<div class="counter${faceToFace ? " face" : ""}">
-    ${half(g, "opp")}
-    <div class="mid">
-      <button type="button" class="undo" title="Undo the last point or turn"${g.log.length ? "" : " disabled"}>↶ Undo</button>
-      <button type="button" class="turn" title="Next turn">Turn ${g.turn} →</button>
-      <span class="series">${g.bo > 1 ? `game ${g.game} · ${g.wins.me}–${g.wins.opp}` : ""}</span>
-      <button type="button" class="flip" title="Turn the opponent's half to face them">⇅</button>
-      <button type="button" class="end">End</button>
-    </div>
-    ${half(g, "me")}
-  </div>`;
-  root.querySelectorAll("[data-kind]").forEach((b) => (b.onclick = () => {
-    const next = GAME.point(getGame(), b.dataset.who, b.dataset.kind);
+  const key = JSON.stringify([g.started, g.deck, g.oppLegend, g.oppName, g.target]);
+  if (built !== key || !$(".counter", root)) {
+    built = key;
+    root.innerHTML = `<div class="counter">
+      ${half(g, "opp")}
+      <div class="mid">
+        <div class="won" hidden><b></b><span class="grow"></span><button type="button" class="btn text undo">Undo</button><button type="button" class="btn filled finish">Finish</button></div>
+        <div class="strip"><button type="button" class="icon-btn undo" aria-label="Undo the last point or turn" title="Undo">↶</button>
+          <button type="button" class="icon-btn flip" aria-label="Turn the opponent's half to face them" title="Turn the opponent's half to face them">⇅</button>
+          <button type="button" class="btn tonal turn" title="Next turn"></button><span class="series"></span>
+          <button type="button" class="btn text finish">End</button></div>
+      </div>
+      ${half(g, "me")}
+    </div>`;
+    root.querySelectorAll(".undo").forEach((b) => (b.onclick = () => setGame(GAME.undo(getGame()))));
+    $(".turn", root).onclick = () => setGame(GAME.nextTurn(getGame()));
+    $(".flip", root).onclick = () => { faceToFace = !faceToFace; try { localStorage.setItem("rb-face", String(faceToFace)); } catch { /* */ } paint(getGame()); };
+    root.querySelectorAll(".finish").forEach((b) => (b.onclick = endGame));
+    root.querySelectorAll("[data-kind]").forEach(pointButton);
+  }
+  paint(g);
+}
+function paint(g) {
+  const w = GAME.winner(g);
+  $(".counter", root).classList.toggle("face", faceToFace);
+  for (const who of ["me", "opp"]) {
+    const el = $(`.side.${who}`, root), total = GAME.total(g, who);
+    el.classList.toggle("ahead", w === who);
+    $(".total span", el).textContent = total;
+    $(".progress i", el).style.width = `${100 * Math.min(1, total / g.target)}%`;
+    $(".turnmark", el).hidden = g.first == null || GAME.mine(g) !== (who === "me");
+    el.querySelectorAll("[data-kind]").forEach((b) => ($("small", b).textContent = g[who][b.dataset.kind]));
+  }
+  root.querySelectorAll(".undo").forEach((b) => (b.disabled = !g.log.length));
+  $(".turn", root).textContent = `Turn ${g.turn} →`;
+  $(".series", root).textContent = g.bo > 1 ? `game ${g.game} · ${g.wins.me}–${g.wins.opp}` : "";
+  $(".won", root).hidden = !w;
+  if (w) $(".won b", root).textContent = `${sideOf(g, w).name} reached ${g.target}`;
+}
+// a tap adds one, holding takes one off
+function pointButton(b) {
+  let timer = null, held = false;
+  const { who, kind } = b.dataset;
+  const add = (d) => {
+    const g = getGame(), next = GAME.point(g, who, kind, d);
+    if (next === g) return;
     setGame(next);
-    navigator.vibrate?.(15);
-    if (GAME.winner(next)) { ending = { winner: GAME.winner(next) }; }
-    render();
-  }));
-  root.querySelector(".undo").onclick = () => { setGame(GAME.undo(getGame())); render(); };
-  root.querySelector(".turn").onclick = () => { setGame(GAME.nextTurn(getGame())); render(); };
-  root.querySelector(".flip").onclick = () => { faceToFace = !faceToFace; try { localStorage.setItem("rb-face", String(faceToFace)); } catch { /* */ } render(); };
-  root.querySelector(".end").onclick = () => { ending = { winner: GAME.winner(g) }; render(); };
+    navigator.vibrate?.(d > 0 ? 15 : [15, 40, 15]);
+    const t = $(`.side.${who} .total span`, root);
+    if (!reducedMotion()) t.animate?.([{ transform: `scale(${d > 0 ? 1.12 : 0.92})` }, { transform: "none" }], { duration: 180, easing: "ease-out" });
+  };
+  const stop = () => { clearTimeout(timer); timer = null; };
+  b.addEventListener("pointerdown", (e) => { if (e.button) return; held = false; stop(); timer = setTimeout(() => { held = true; add(-1); }, 500); });
+  for (const ev of ["pointerup", "pointercancel", "pointerleave"]) b.addEventListener(ev, stop);
+  b.addEventListener("contextmenu", (e) => e.preventDefault());
+  b.addEventListener("click", () => { if (held) { held = false; return; } add(1); });
 }
 
 // ---------- the end of a game ----------
 
-function endScreen(g) {
-  wake(false);
-  const w = ending.winner, guess = w === "me" ? "win" : w === "opp" ? "loss" : "";
-  root.innerHTML = `<form class="end-form card-form">
-    <h1>${w === "me" ? "You won" : w === "opp" ? "You lost" : "End of the game"} <small>${GAME.total(g, "me")}–${GAME.total(g, "opp")}${g.bo > 1 ? ` · game ${g.game}` : ""}</small></h1>
-    <fieldset class="seg"><legend>Result</legend>${["win", "loss", "draw"].map((r) => `<label><input type="radio" name="result" value="${r}"${r === guess ? " checked" : ""} required>${r}</label>`).join("")}</fieldset>
-    <label>Opponent's legend <select name="oppLegend">${legendOptions(g.oppLegend)}</select></label>
-    <label>Tags <input name="tags" placeholder="comma separated, e.g. mulligan, misplay"></label>
-    <label>Notes <textarea name="notes" rows="6" placeholder="How did it go? What would you do differently?"></textarea></label>
-    <div class="row"><button type="button" class="back">Back to the game</button><button type="button" class="drop danger">Don't save</button><span class="grow"></span><button class="primary big">Save</button></div>
-  </form>`;
-  const f = root.querySelector("form");
-  f.querySelector(".back").onclick = () => { ending = null; render(); };
-  f.querySelector(".drop").onclick = () => { if (confirm("Throw this game away?")) { ending = null; setGame(null); render(); } };
-  f.onsubmit = (e) => {
-    e.preventDefault();
-    const result = f.result.value;
-    const id = LIB.saveMatch(null, GAME.toMatch({ ...g, oppLegend: f.oppLegend.value || null }, result, { tags: splitTags(f.tags.value), notes: f.notes.value }));
-    const next = GAME.next({ ...g, oppLegend: f.oppLegend.value || null }, result, id);
-    ending = null;
-    setGame(next);
-    if (!next) { afterSeries(g.deck); return; }
-    render();
-  };
+function endGame() {
+  const g = getGame(), w = GAME.winner(g);
+  ending = true;
+  const m = GAME.toMatch(g, w === "me" ? "win" : w === "opp" ? "loss" : null);
+  matchDialog({ ...m, date: null }, () => {}, {
+    title: `${w === "me" ? "You won" : w === "opp" ? "You lost" : "End of the game"} · ${GAME.total(g, "me")}–${GAME.total(g, "opp")}`,
+    cancelled: () => { ending = false; if (getGame()) render(); },
+    discard: () => { ending = false; setGame(null); },
+    save: (fields) => {
+      ending = false;
+      const id = LIB.saveMatch(null, { ...m, ...fields });
+      const next = GAME.next({ ...g, deck: fields.deck, deckver: fields.deckver, oppLegend: fields.oppLegend, oppName: fields.oppName, event: fields.event }, fields.result, id);
+      saved = fields.deck;
+      smoothly(() => setGame(next));
+      if (next) toast(`Game ${g.game} saved`);
+    },
+  });
 }
 function afterSeries(deck) {
-  root.innerHTML = `<div class="card-form done"><h1>Saved</h1>
-    <div class="row"><a class="btn" href="decks.html#d/${esc(deck)}">See the deck</a><span class="grow"></span><button type="button" class="primary big again">New game</button></div></div>`;
-  root.querySelector(".again").onclick = render;
+  built = null;
+  const c = CARD_BY_ID.get(LIB.deck(deck)?.legend);
+  root.innerHTML = `<div class="setup done"><span class="art round" style="${artStyle(c)}"></span><h1>Saved</h1><p class="note">${recordText(record(LIB.matches(deck)))} with ${esc(LIB.deck(deck)?.name || "this deck")}</p>
+    <div class="row"><a class="btn tonal big" href="decks.html#d/${esc(deck)}">See the deck</a><button type="button" class="btn filled big again">New game</button></div></div>`;
+  $(".again", root).onclick = () => { saved = null; render(); };
 }
 
 // ---------- keeping the screen on while counting ----------
@@ -137,12 +173,12 @@ async function wake(on) {
 }
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && getGame() && !ending) wake(true); });
 
-// the game changed elsewhere (another tab or device): show it, unless a form is being filled in here
+// the game changed, here or in another tab or device: show it, unless a form is being filled in here
 STORE.on((kinds) => {
   if (!kinds.has("game") || ending) return;
-  if (document.activeElement?.matches("input, textarea, select") && root.contains(document.activeElement)) return;
+  if (!getGame() && $(".setup.fields", root) && $("dialog[open]")) return;
+  if (document.activeElement?.matches("input, textarea, select") && $(".setup.fields", root)?.contains(document.activeElement) && !getGame()) return;
   render();
 });
-window.addEventListener("hashchange", () => { if (!getGame()) render(); });
+window.addEventListener("hashchange", () => { if (!getGame()) { saved = null; render(); } });
 render();
-if ("serviceWorker" in navigator && location.protocol.startsWith("http")) navigator.serviceWorker.register("sw.js");

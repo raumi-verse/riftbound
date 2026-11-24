@@ -2,26 +2,29 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Riftbound goldfish</title>
 <link rel="stylesheet" href="style.css">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/app-192.png">
 <link rel="apple-touch-icon" href="icons/app-192.png">
 <meta name="theme-color" content="#181825">
+<script type="speculationrules">{"prefetch":[{"where":{"selector_matches":"nav.pages a"},"eagerness":"moderate"}]}</script>
 </head>
-<body>
+<body data-page="goldfish">
 <header>
-  <nav class="pages"><a href="./">Cards</a><a href="decks.html">Decks</a><a href="play.html">Play</a><a href="goldfish.html" aria-current="page">Goldfish</a></nav>
+  <nav class="pages" aria-label="Pages"><a href="./"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="3" width="10" height="15" rx="2"/><path d="M17 6l3 1-3.5 13-7-2"/></svg><span>Cards</span></a><a href="collection.html"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14v16H5zM9 4v16M12 9h4M12 13h4"/></svg><span>Collection</span></a><a href="decks.html" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l9 5-9 5-9-5zM3 12l9 5 9-5M3 16l9 5 9-5"/></svg><span>Decks</span></a><a href="play.html"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M10 8.5l6 3.5-6 3.5z"/></svg><span>Play</span></a></nav>
 </header>
 <main class="gf">
+  <p><a href="decks.html">← Decks</a></p>
+  <h1>Goldfish</h1>
   <form id="gf-form">
     <label for="deck">Deck: a Piltover deck code, or a list (<code>2 Name</code> lines, with or without <code>Legend:</code> <code>MainDeck:</code> <code>Runes:</code> … headers)</label>
     <textarea id="deck" rows="10" spellcheck="false" autocomplete="off" placeholder="Legend:&#10;1 Jinx, Loose Cannon&#10;Champion:&#10;1 Jinx, Demolitionist&#10;MainDeck:&#10;3 …&#10;Runes:&#10;6 Fury Rune&#10;6 Chaos Rune"></textarea>
     <div class="row">
       <label>Going <select id="order"><option value="first">first</option><option value="second">second</option></select></label>
       <label>Games <input id="games" type="number" min="1000" step="1000"></label>
-      <button type="submit">Run</button>
+      <button type="submit" class="btn filled">Run</button>
       <span id="status"></span>
     </div>
   </form>
@@ -37,6 +40,7 @@
   <p class="legal">Riftbound card search isn't endorsed by Riot Games and doesn't reflect the views or opinions of Riot Games or anyone officially involved in producing or managing Riot Games properties. Riot Games, Riftbound, League of Legends and all associated properties are trademarks or registered trademarks of Riot Games, Inc.</p>
 </footer>
 <script src="settings.js"></script>
+<script src="ui.js"></script>
 <script src="cards.js"></script>
 <script src="store.js"></script>
 <script src="sync.js"></script>
@@ -44,6 +48,7 @@
 <script src="deck.js"></script>
 <script src="sim.js"></script>
 <script src="goldfish.js"></script>
+<script src="shell.js"></script>
 <script src="account.js"></script>
 </body>
 </html>
