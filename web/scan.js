@@ -177,7 +177,7 @@ function crop(src, r, scale, bin = false) {
 // works in any language, and pixels of glare (bright, colourless) are left out. The frame is tried at a few offsets and
 // sizes, as no card is held exactly. Correlation: 1 the same picture, around 0 unrelated ones.
 const ART = { x: 0.08, y: 0.1, w: 0.84, h: 0.42 }, FRAME = [186, 260];
-const ART_SURE = { score: 0.55, ahead: 0.12 }; // gave no wrong card, on photos and in trials with glare, tilt and noise
+const ART_SURE = { score: 0.55, ahead: 0.12, both: 0.78 }; // gave no wrong card, on photos and in trials with glare, tilt and noise
 let artIndex = null;
 function artReady() {
   return (artIndex ??= (async () => {
@@ -194,7 +194,11 @@ function readArt(x) {
   for (let i = 0; i < bin.length; i++) px[i] = bin.charCodeAt(i);
   const hp = new Float32Array(px.length), n = x.w * x.h * 3, all = new Uint8Array(x.w * x.h).fill(1);
   for (let o = 0; o < px.length; o += n) hp.set(local(px.subarray(o, o + n), x.w, x.h, all), o);
-  return { ...x, px, hp, at: new Map(x.ids.map((id, i) => [id, i])) };
+  // half the size, to pick the likely ones quickly
+  const cw = x.w >> 1, ch = x.h >> 1, N = x.ids.length, small = new Float32Array(N * cw * ch * 3);
+  for (let i = 0; i < N; i++) for (let y = 0; y < x.h; y++) for (let xx = 0; xx < x.w; xx++) for (let c = 0; c < 3; c++)
+    small[(i * cw * ch + (y >> 1) * cw + (xx >> 1)) * 3 + c] += px[(i * x.w * x.h + y * x.w + xx) * 3 + c] / 4;
+  return { ...x, px, hp, small, cw, ch, at: new Map(x.ids.map((id, i) => [id, i])) };
 }
 // each cell against the mean of the 5 x 5 around it (only those in the mask): what soft glare, a haze over part of the
 // card, leaves alone
@@ -220,14 +224,18 @@ function centre(v, out, use, m) {
   for (let j = 0; j < m; j++) { const d = v[use[j]] - mean; out[use[j]] = d; n += d * d; }
   return Math.sqrt(n) || 1e-6;
 }
+const artSure = (a) => a.score[a.best] >= ART_SURE.score && a.ahead >= ART_SURE.ahead && a.score[a.best] + a.ahead >= ART_SURE.both; // a hand over a card: 0.60 + 0.14
 // rgba: the pixels of a w x h picture of the card -> {score: Float32Array per printing, best, ahead, clear}
 // ahead: how far the best is above the best other art; clear: the part of the art free of glare
+const LIKELY = 120; // of the 1400 pictures, this many are compared closely
 function artMatch(rgba, w, h, ix) {
-  const cells = ix.w * ix.h, N = ix.ids.length, score = new Float32Array(N).fill(-1), v = new Float32Array(cells * 3), mask = new Uint8Array(cells), x = new Float32Array(cells * 3), use = new Int32Array(cells * 3);
+  const cells = ix.w * ix.h, N = ix.ids.length, score = new Float32Array(N).fill(-1);
   let clear = 0;
+  // each placement of the art in the frame: its cells, which are free of glare
+  const places = [];
   for (const s of [0.93, 1, 1.07]) for (const dx of [-0.03, 0, 0.03]) for (const dy of [-0.025, 0, 0.025]) {
     const X0 = (ART.x + ART.w / 2 + dx - ART.w * s / 2) * w, Y0 = (ART.y + ART.h / 2 + dy - ART.h * s / 2) * h, cw = ART.w * s * w / ix.w, ch = ART.h * s * h / ix.h;
-    const glare = new Uint8Array(cells);
+    const glare = new Uint8Array(cells), mask = new Uint8Array(cells), v = new Float32Array(cells * 3);
     for (let cy = 0, k = 0; cy < ix.h; cy++) for (let cx = 0; cx < ix.w; cx++, k++) {
       const x0 = Math.max(0, Math.round(X0 + cx * cw)), x1 = Math.min(w, Math.max(x0 + 1, Math.round(X0 + (cx + 1) * cw)));
       const y0 = Math.max(0, Math.round(Y0 + cy * ch)), y1 = Math.min(h, Math.max(y0 + 1, Math.round(Y0 + (cy + 1) * ch)));
@@ -245,26 +253,49 @@ function artMatch(rgba, w, h, ix) {
       free += mask[k];
     }
     clear = Math.max(clear, free / cells);
-    if (free < cells * 0.2) continue;
+    if (free >= cells * 0.2) places.push({ v, mask, trust: Math.min(1, 0.8 + 0.4 * free / cells) }); // less art to go by counts a little less
+  }
+  // all pictures at half size
+  const n2 = ix.cw * ix.ch, use = new Int32Array(cells * 3), x = new Float32Array(cells * 3);
+  for (const pl of places) {
+    const sv = new Float32Array(n2 * 3), sm = new Uint8Array(n2);
+    for (let k = 0; k < cells; k++) if (pl.mask[k]) { const q = (k / ix.w >> 1) * ix.cw + (k % ix.w >> 1); sm[q]++; for (let c = 0; c < 3; c++) sv[q * 3 + c] += pl.v[k * 3 + c]; }
     let m = 0;
-    for (let k = 0; k < cells; k++) if (mask[k]) for (let c = 0; c < 3; c++) use[m++] = k * 3 + c;
-    // the picture itself and its local contrast, half each
-    const z = local(v, ix.w, ix.h, mask);
-    const norm = centre(v, x, use, m), zn = centre(z, z, use, m);
+    for (let q = 0; q < n2; q++) if (sm[q] > 1) for (let c = 0; c < 3; c++) { sv[q * 3 + c] /= sm[q]; use[m++] = q * 3 + c; }
+    if (m < 12) continue;
+    const norm = centre(sv, x, use, m);
     if (norm * norm < m * 9) continue; // nearly one colour: no picture there
-    const trust = Math.min(1, 0.8 + 0.4 * free / cells); // less art to go by counts a little less
     for (let i = 0; i < N; i++) {
-      const o = i * cells * 3;
-      let sx = 0, s1 = 0, s2 = 0, hx = 0, h1 = 0, h2 = 0;
-      for (let j = 0; j < m; j++) {
-        const k = use[j], p = ix.px[o + k], q = ix.hp[o + k];
-        sx += p * x[k]; s1 += p; s2 += p * p;
-        hx += q * z[k]; h1 += q; h2 += q * q;
-      }
-      const c = trust * (sx / (norm * Math.sqrt(Math.max(1e-6, s2 - s1 * s1 / m))) + hx / (zn * Math.sqrt(Math.max(1e-6, h2 - h1 * h1 / m)))) / 2;
+      const o = i * n2 * 3;
+      let sx = 0, s1 = 0, s2 = 0;
+      for (let j = 0; j < m; j++) { const k = use[j], p = ix.small[o + k]; sx += p * x[k]; s1 += p; s2 += p * p; }
+      const c = pl.trust * sx / (norm * Math.sqrt(Math.max(1e-6, s2 - s1 * s1 / m)));
       if (c > score[i]) score[i] = c;
     }
   }
+  const likely = Array.from(score.keys()).sort((a, b) => score[b] - score[a]).slice(0, LIKELY), close = new Float32Array(LIKELY).fill(-1);
+  // those closely: the picture itself and its local contrast, half each
+  for (const { v, mask, trust } of places) {
+    let m = 0;
+    for (let k = 0; k < cells; k++) if (mask[k]) for (let c = 0; c < 3; c++) use[m++] = k * 3 + c;
+    const z = local(v, ix.w, ix.h, mask), norm = centre(v, x, use, m), zn = centre(z, z, use, m);
+    if (norm * norm < m * 9) continue;
+    likely.forEach((i, q) => {
+      const o = i * cells * 3;
+      let sx = 0, s1 = 0, s2 = 0, hx = 0, h1 = 0, h2 = 0;
+      for (let j = 0; j < m; j++) {
+        const k = use[j], p = ix.px[o + k], r = ix.hp[o + k];
+        sx += p * x[k]; s1 += p; s2 += p * p;
+        hx += r * z[k]; h1 += r; h2 += r * r;
+      }
+      const c = trust * (sx / (norm * Math.sqrt(Math.max(1e-6, s2 - s1 * s1 / m))) + hx / (zn * Math.sqrt(Math.max(1e-6, h2 - h1 * h1 / m)))) / 2;
+      if (c > close[q]) close[q] = c;
+    });
+  }
+  // the unlikely ones can't be better than the least likely of those
+  const least = Math.min(...close);
+  for (let i = 0; i < N; i++) score[i] = Math.min(score[i], least);
+  likely.forEach((i, q) => (score[i] = close[q]));
   let best = 0, other = -1;
   for (let i = 1; i < N; i++) if (score[i] > score[best]) best = i;
   for (let i = 0; i < N; i++) if (ix.group[i] !== ix.group[best] && score[i] > other) other = score[i];
@@ -280,33 +311,46 @@ async function matchArt(canvas) {
 }
 
 // ---------- the language ----------
-// The known card's name and rules are compared, piece by piece, with its English picture: a match is English, text that
-// matches nowhere is another language. In between (glare, hardly any text) it's unsure: null.
-const TEXT = { w: 200, h: 340, dx: 12, dy: 12 }; // cells per card, and how far a piece may be off
+// The card is known: it's found exactly in the frame (it may lie off centre or tilted), straightened, and its name and
+// rules compared, piece by piece, with its English picture, blurred as the frame may be. A match is English. Text that is
+// sharp and still matches nowhere is another language. Anything else (blur, glare, hardly any text) is unsure: null.
+const TEXT = { w: 200, h: 340, dx: 8, dy: 8 }; // cells per card, and how far a piece may be off
 const TEXT_TILES = [0.1, 0.25, 0.4].map((x) => [x, 0.588, 0.15, 0.06])
   .concat([0.665, 0.735, 0.805].flatMap((y) => [0.1, 0.3, 0.5, 0.7].map((x) => [x, y, 0.2, 0.07])));
-const ENGLISH_FROM = 0.42, OTHER_TO = 0.36; // the first eleven photos: English 0.44 to 0.70, Chinese 0.21 to 0.34
-// rgba of TEXT.w x TEXT.h -> grey less its 7 x 7 mean: the strokes
-function strokes(rgba) {
-  const { w, h } = TEXT, g = new Float32Array(w * h), sum = new Float64Array((w + 1) * (h + 1)), out = new Float32Array(w * h);
+// eleven photos, each also blurred, and a webcam's frames: English 0.67 and up, Chinese up to 0.58
+const LANGUAGE = { english: 0.64, other: 0.55, sharp: 0.25 };
+function grey(rgba) {
+  const g = new Float32Array(rgba.length / 4);
   for (let i = 0; i < g.length; i++) g[i] = rgba[i * 4] * 0.299 + rgba[i * 4 + 1] * 0.587 + rgba[i * 4 + 2] * 0.114;
+  return g;
+}
+// the mean of the (2r+1)^2 cells around each
+function soften(g, w, h, r) {
+  const sum = new Float64Array((w + 1) * (h + 1)), out = new Float32Array(w * h);
   for (let y = 0; y < h; y++) for (let x = 0, row = 0; x < w; x++) { row += g[y * w + x]; sum[(y + 1) * (w + 1) + x + 1] = sum[y * (w + 1) + x + 1] + row; }
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-    const x0 = Math.max(0, x - 3), x1 = Math.min(w, x + 4), y0 = Math.max(0, y - 3), y1 = Math.min(h, y + 4);
-    out[y * w + x] = g[y * w + x] - (sum[y1 * (w + 1) + x1] - sum[y0 * (w + 1) + x1] - sum[y1 * (w + 1) + x0] + sum[y0 * (w + 1) + x0]) / ((x1 - x0) * (y1 - y0));
+    const x0 = Math.max(0, x - r), x1 = Math.min(w, x + r + 1), y0 = Math.max(0, y - r), y1 = Math.min(h, y + r + 1);
+    out[y * w + x] = (sum[y1 * (w + 1) + x1] - sum[y0 * (w + 1) + x1] - sum[y1 * (w + 1) + x0] + sum[y0 * (w + 1) + x0]) / ((x1 - x0) * (y1 - y0));
   }
   return out;
 }
-// how well a's text (strokes of a frame) matches b's (of the English picture): 0 to 1, or null without enough text
+// grey less its 7 x 7 mean: the strokes
+function strokes(g) {
+  const s = soften(g, TEXT.w, TEXT.h, 3);
+  for (let i = 0; i < s.length; i++) s[i] = g[i] - s[i];
+  return s;
+}
+const tileBox = ([fx, fy, fw, fh]) => [Math.floor(fx * TEXT.w), Math.floor(fy * TEXT.h), Math.floor(fw * TEXT.w), Math.floor(fh * TEXT.h)];
+// how well a's text matches b's (strokes of the English picture): 0 to 1, or null without enough text
 function textMatch(a, b) {
   const { w, h, dx, dy } = TEXT;
   let total = 0, weight = 0, n = 0;
-  for (const [fx, fy, fw, fh] of TEXT_TILES) {
-    const x0 = Math.floor(fx * w), y0 = Math.floor(fy * h), tw = Math.floor(fw * w), th = Math.floor(fh * h);
+  for (const tile of TEXT_TILES) {
+    const [x0, y0, tw, th] = tileBox(tile);
     let bb = 0;
     for (let y = 0; y < th; y++) for (let x = 0; x < tw; x++) { const t = b[(y0 + y) * w + x0 + x]; bb += t * t; }
     const energy = Math.sqrt(bb / (tw * th));
-    if (energy < 11) continue; // no text there
+    if (energy < 6) continue; // no text there
     let best = -1, seen = 0;
     for (let oy = -dy; oy <= dy; oy++) for (let ox = -dx; ox <= dx; ox++) {
       if (x0 + ox < 0 || y0 + oy < 0 || x0 + ox + tw > w || y0 + oy + th > h) continue;
@@ -315,20 +359,63 @@ function textMatch(a, b) {
       const q = ab / (Math.sqrt(bb * aa) + 1e-3);
       if (q > best) { best = q; seen = Math.sqrt(aa / (tw * th)); }
     }
-    if (seen < 3) continue; // washed out
+    if (seen < 1.5) continue; // washed out
     total += best * energy; weight += energy; n++;
   }
   return n < 2 ? null : total / weight;
 }
-function strokesOf(src) {
+// how fine the detail of the text area is: lower when blurred
+function detail(g, b) {
+  const { w } = TEXT, all = [];
+  for (const tile of TEXT_TILES) {
+    const [x0, y0, tw, th] = tileBox(tile);
+    let e = 0, mean = 0, fine = 0, v = 0, n = 0;
+    for (let y = y0; y < y0 + th; y++) for (let x = x0; x < x0 + tw; x++) { const i = y * w + x; e += b[i] * b[i]; mean += g[i]; n++; }
+    if (Math.sqrt(e / n) < 11) continue;
+    mean /= n;
+    for (let y = y0; y < y0 + th; y++) for (let x = x0; x < x0 + tw; x++) { const i = y * w + x, f = 4 * g[i] - g[i - 1] - g[i + 1] - g[i - w] - g[i + w]; fine += f * f; v += (g[i] - mean) ** 2; }
+    all.push(Math.sqrt(fine / n) / (Math.sqrt(v / n) + 4));
+  }
+  all.sort((p, q) => p - q);
+  return all.length ? all[all.length >> 1] : null;
+}
+// Where the card lies in the frame: {s, rot, dx, dy} against filling it, by the whole picture at 40 x 56.
+const FIND = { w: 40, h: 56, pw: 80, ph: 112 };
+function findCard(frame, ref) { // frame: grey pw x ph, ref: grey w x h
+  const { w, h, pw, ph } = FIND, pts = [];
+  for (let y = 2; y < h - 2; y += 2) for (let x = 2; x < w - 2; x += 2) pts.push([((x + 0.5) / w - 0.5) * pw, ((y + 0.5) / h - 0.5) * ph, ref[y * w + x]]);
+  const mean = pts.reduce((a, p) => a + p[2], 0) / pts.length;
+  let rr = 0;
+  for (const p of pts) { p[2] -= mean; rr += p[2] * p[2]; }
+  const at = (s, rot, dx, dy) => {
+    const c = Math.cos(rot) * s, n = Math.sin(rot) * s, ox = pw / 2 + dx * pw, oy = ph / 2 + dy * ph;
+    let sv = 0, vv = 0, rv = 0, out = 0;
+    for (let i = 0; i < pts.length; i++) {
+      const p = pts[i], X = Math.round(ox + c * p[0] - n * p[1] - 0.5), Y = Math.round(oy + n * p[0] + c * p[1] - 0.5);
+      let v = 0;
+      if (X >= 0 && Y >= 0 && X < pw && Y < ph) v = frame[Y * pw + X]; else { out++; v = 40; }
+      sv += v; vv += v * v; rv += p[2] * v;
+    }
+    return out > pts.length * 0.3 ? -1 : rv / Math.sqrt(rr * Math.max(1e-6, vv - sv * sv / pts.length));
+  };
+  let best = { q: -1, s: 1, rot: 0, dx: 0, dy: 0 };
+  const go = (s, rot, dx, dy) => { const q = at(s, rot, dx, dy); if (q > best.q) best = { q, s, rot, dx, dy }; };
+  for (const s of [0.7, 0.78, 0.86, 0.94, 1.02]) for (const r of [-9, -6, -3, 0, 3, 6, 9]) for (let dx = -0.2; dx < 0.21; dx += 0.04) for (let dy = -0.2; dy < 0.21; dy += 0.04) go(s, r * Math.PI / 180, dx, dy);
+  for (const k of [1, 0.5, 0.25]) {
+    const b = best;
+    for (const s of [-0.04, 0, 0.04]) for (const r of [-1.5, 0, 1.5]) for (const x of [-0.02, 0, 0.02]) for (const y of [-0.02, 0, 0.02]) go(b.s + s * k, b.rot + r * k * Math.PI / 180, b.dx + x * k, b.dy + y * k);
+  }
+  return best;
+}
+function pixels(src, w, h, draw) {
   const c = document.createElement("canvas");
-  c.width = TEXT.w; c.height = TEXT.h;
+  c.width = w; c.height = h;
   const g = c.getContext("2d", { willReadFrequently: true });
   g.imageSmoothingQuality = "high";
-  g.drawImage(src, 0, 0, c.width, c.height);
-  return strokes(g.getImageData(0, 0, c.width, c.height).data);
+  if (draw) draw(g); else g.drawImage(src, 0, 0, w, h);
+  return grey(g.getImageData(0, 0, w, h).data);
 }
-const ENGLISH = new Map(); // printing id -> Promise<strokes | null>
+const ENGLISH = new Map(); // printing id -> Promise<{find, g, ref: [strokes at each blur]} | null>
 function englishText(p) {
   if (!ENGLISH.has(p.id)) ENGLISH.set(p.id, (async () => {
     if (!p.img) return null;
@@ -336,17 +423,31 @@ function englishText(p) {
     img.crossOrigin = "anonymous";
     img.src = p.img;
     await img.decode();
-    return strokesOf(img);
+    const g = pixels(img, TEXT.w, TEXT.h);
+    return { find: pixels(img, FIND.w, FIND.h), g, ref: [g, soften(g, TEXT.w, TEXT.h, 1), soften(soften(g, TEXT.w, TEXT.h, 1), TEXT.w, TEXT.h, 1)].map(strokes) };
   })().catch(() => { ENGLISH.delete(p.id); return null; }));
   return ENGLISH.get(p.id);
 }
-// {lang: "en", "zh" or null (unsure), score} for a frame showing printing p
+// {lang: "en", "zh" or null (unsure), score, sharp} for a frame showing printing p
 async function readLanguage(canvas, p, card) {
-  if (card.landscape || card.type === "Rune") return { lang: null, score: null }; // the text is elsewhere, or there is none
-  // a slow picture must not hold up the scanning
-  const b = await Promise.race([englishText(p), new Promise((r) => setTimeout(() => r(null), 2500))]);
-  const s = b && textMatch(strokesOf(canvas), b);
-  return { lang: s == null ? null : s >= ENGLISH_FROM ? "en" : s <= OTHER_TO ? "zh" : null, score: s ?? null };
+  const none = { lang: null, score: null, sharp: null };
+  if (card.landscape || card.type === "Rune") return none; // the text is elsewhere, or there is none
+  const e = await englishText(p);
+  if (!e) return none;
+  const at = findCard(pixels(canvas, FIND.pw, FIND.ph), e.find), W = canvas.width, H = canvas.height;
+  if (at.q < 0.4) return none;
+  const g = pixels(null, TEXT.w, TEXT.h, (c) => {
+    c.translate(TEXT.w / 2, TEXT.h / 2); c.scale(TEXT.w / W, TEXT.h / H); c.rotate(-at.rot); c.scale(1 / at.s, 1 / at.s);
+    c.translate(-W / 2 - at.dx * W, -H / 2 - at.dy * H);
+    c.drawImage(canvas, 0, 0);
+  });
+  const full = detail(e.g, e.ref[0]), d = detail(g, e.ref[0]), sharp = full && d != null ? d / full : 0;
+  // print and pixels differ in the finest detail: a sharp frame is compared a little softened
+  const a = strokes(sharp > 0.5 ? soften(g, TEXT.w, TEXT.h, 1) : g);
+  const scores = e.ref.map((b) => textMatch(a, b)).filter((s) => s != null);
+  if (!scores.length) return { ...none, sharp };
+  const score = Math.max(...scores);
+  return { lang: score >= LANGUAGE.english ? "en" : score <= LANGUAGE.other && sharp >= LANGUAGE.sharp ? "zh" : null, score, sharp, at };
 }
 
 const COLLECTOR_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789•·*/-. ";
@@ -448,7 +549,7 @@ function initScan(onAdd) {
   let tally = (() => { try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch { return []; } })(); // [{id, n}]
   const shots = new Map(); // tally line -> {frame, think}: the frame it came from and what the scan thought, till the page closes
   let missed = null; // the newest frame nothing was found in: {frame, think, at}
-  let lastFrame = null, inOrder = false;
+  let inOrder = false;
   const pile = $s(".pile");
   let stream = null, running = false, last = null, armed = true, empties = 0, audio = null;
   const esc = (x) => String(x ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
@@ -523,30 +624,33 @@ function initScan(onAdd) {
     c.getContext("2d").drawImage(video, x, y, w, h, 0, 0, c.width, c.height);
     return c;
   }
-  async function find(canvas) {
+  async function find(canvas, still = true) {
     let a = null, m = null, r = { collector: "", name: "" };
     try { a = await matchArt(canvas); } catch { /* offline and never loaded: the text alone */ }
-    if (a && a.score[a.best] >= ART_SURE.score && a.ahead >= ART_SURE.ahead) {
+    if (a && artSure(a)) {
       const grp = a.ix.group[a.best], same = a.ix.ids.filter((_, i) => a.ix.group[i] === grp).map((id) => PRINTS.get(id.toUpperCase())).filter(Boolean);
       const hit = (x, sure) => ({ id: x.p.id, card: x.card, p: x.p, score: a.score[a.best], how: "art", sure });
       if (same.length === 1) m = hit(same[0], true);
       else if (same.length) {
         // the same picture on several printings: the number decides, else the first one, to be checked
-        r = await recognize(canvas, { name: false });
+        // not again for the card that was just counted
+        if (!armed && same.some((x) => x.p.id === last)) return { ...hit(same.find((x) => x.p.id === last), true), think: null };
+        r = still ? await recognize(canvas, { name: false }) : r;
         const read = numberCandidates(r.collector).find((c) => c.read && same.some((x) => x.p.id === c.p.id));
         const first = same.slice().sort((x, y) => (x.p.kind ? 1 : 0) - (y.p.kind ? 1 : 0))[0];
         m = hit(read || first, !!read);
       }
     }
-    if (!m) {
+    // reading text takes long on a phone: only for a frame that holds still, not for each in between
+    if (!m && still) {
       r = await recognize(canvas, { name: false });
       m = byArt(a, numberCandidates(r.collector), r);
-    }
-    if (!m) {
-      r.name = (await recognize(canvas, { collector: false })).name;
-      m = byArt(a, nameCandidates(r.name).flatMap((card) => card.printings.map((p) => ({ card, p }))), r);
-      // no pictures to compare: the text alone, to be checked
-      if (!m && (!a || r.artUnknown)) { const t = matchScan(r); if (t) m = { ...t, sure: false }; }
+      if (!m) {
+        r.name = (await recognize(canvas, { collector: false })).name;
+        m = byArt(a, nameCandidates(r.name).flatMap((card) => card.printings.map((p) => ({ card, p }))), r);
+        // no pictures to compare: the text alone, to be checked
+        if (!m && (!a || r.artUnknown)) { const t = matchScan(r); if (t) m = { ...t, sure: false }; }
+      }
     }
     const think = { collector: r.collector, name: r.name, clear: a?.clear, ahead: a?.ahead,
       art: a ? [...a.score.keys()].sort((x, y) => a.score[y] - a.score[x]).slice(0, 5).map((i) => [a.ix.ids[i], +a.score[i].toFixed(3)]) : null };
@@ -558,39 +662,67 @@ function initScan(onAdd) {
     if (window.SETTINGS?.scanDebug) { hint.textContent = `art ${a ? `${a.ix.ids[a.best]} ${a.score[a.best].toFixed(2)} +${a.ahead.toFixed(2)} clear ${a.clear.toFixed(2)}` : "-"} · ${r.collector.replace(/\s+/g, " ")} · ${r.name.replace(/\s+/g, " ").slice(0, 40)} → ${m?.id ?? "-"}`; window.SCAN_LAST = canvas; }
     return m;
   }
-  // the language, from this frame or else the one before; and the frame itself, in case it has to be corrected
-  async function language(m, ...frames) {
-    for (const c of frames) {
-      if (!c || m.lang) continue;
-      const l = await readLanguage(c, m.p, m.card).catch(() => null);
-      m.lang = l?.lang;
-      if (m.think) m.think.text = l?.score ?? m.think.text;
-    }
+  // Added at once, with the language chosen; the frames after it settle the language while the card still lies there.
+  let settle = null; // {t, m, tries}
+  async function language(m, c) {
+    const l = await readLanguage(c, m.p, m.card).catch(() => null);
+    if (m.think && l?.score != null) { m.think.text = l.score; m.think.sharp = l.sharp; }
     m.read = true;
-    m.frame = snapshot(frames[0]);
-    missed = null;
+    m.lang = l?.lang;
+    return m.lang;
+  }
+  async function settleLanguage(c) {
+    const s = settle;
+    if (!s || !tally.includes(s.t) || ++s.tries > 8) { settle = null; return; }
+    if (!(await language(s.m, c))) return;
+    settle = null;
+    s.t.guess = false;
+    const ver = verOf(s.m.lang, (s.t.ver || "").endsWith("foil"));
+    const x = shots.get(s.t.k);
+    if (x) { x.frame = snapshot(c); x.think = s.m.think; }
+    if (ver === (s.t.ver || "")) { save(); show(); return; }
+    if (s.t.n > 1) { s.t.n--; const one = { ...s.t, k: STORE.uid(), n: 1, ver }; if (x) shots.set(one.k, x); tally.push(one); merge(one); } else { s.t.ver = ver; merge(s.t); }
+    hint.textContent = `${s.m.card.name} · ${VERSIONS[ver]}`;
+  }
+  // how much changed since the frame before (0 to 255)
+  let small = null;
+  function moved(canvas) {
+    const g = pixels(canvas, 24, 34), was = small;
+    small = g;
+    if (!was) return 255;
+    let d = 0;
+    for (let i = 0; i < g.length; i++) d += Math.abs(g[i] - was[i]);
+    return d / g.length;
   }
   async function loop() {
+    let unsure = 0;
     while (running) {
+      await new Promise((r) => setTimeout(r, 0)); // let the page breathe
       const c = grab();
       if (!c) { await new Promise((r) => setTimeout(r, 200)); continue; }
+      const still = moved(c) < 6;
       let m = null;
-      try { m = await find(c); } catch (e) { hint.textContent = e.message; running = false; break; }
+      try { m = await find(c, still && unsure >= 2); } catch (e) { hint.textContent = e.message; running = false; break; }
       if (!running) break;
       if (!m) {
-        if (++empties >= 2) { armed = true; last = null; }
+        unsure = still ? unsure + 1 : 0;
+        if (unsure > 2) unsure = -4; // read, nothing found: not again right away
+        if (++empties >= 2) { armed = true; last = null; settle = null; }
         if (armed && !window.SETTINGS?.scanDebug && !hint.textContent.startsWith("Glare")) hint.textContent = "Hold a card in the frame, its bottom edge on the line";
         continue;
       }
-      empties = 0;
-      if (last && m.id !== last) armed = true; // another card
+      empties = 0; unsure = 0;
+      if (last && m.id !== last) { armed = true; settle = null; } // another card
+      if (last !== m.id) englishText(m.p); // loading while the next frame is taken
       if (armed && m.id === last) {
         armed = false;
-        await language(m, c, lastFrame);
-        if (!running) break;
+        missed = null;
+        m.read = true;
+        m.frame = snapshot(c);
         add(m);
-      }
-      lastFrame = c;
+        settle = { t: tally.at(-1), m, tries: 0 };
+        await settleLanguage(c);
+      } else if (settle && m.id === last && still) await settleLanguage(c);
       last = m.id;
     }
   }
@@ -636,7 +768,7 @@ function initScan(onAdd) {
     c.width = bmp.width; c.height = bmp.height;
     c.getContext("2d").drawImage(bmp, 0, 0);
     const m = await find(c).catch(() => null);
-    if (m) { await language(m, c); add(m); } else hint.textContent = "Couldn't read that card: crop the photo to the card, or type its number";
+    if (m) { m.frame = snapshot(c); await language(m, c); add(m); } else hint.textContent = "Couldn't read that card: crop the photo to the card, or type its number";
   };
   $s("form.manual").onsubmit = (e) => {
     e.preventDefault();

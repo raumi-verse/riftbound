@@ -82,11 +82,11 @@ test("text: the same is English, other strokes aren't, none says nothing", () =>
       const x = Math.floor(20 + rnd() * 155) + shift, y = Math.floor(195 + rnd() * 100) + shift, len = 2 + Math.floor(rnd() * 5), up = rnd() < 0.5;
       for (let i = 0; i < len; i++) for (let c = 0; c < 3; c++) d[((y + (up ? i : 0)) * w + x + (up ? 0 : i)) * 4 + c] = ink;
     }
-    return strokes(d);
+    return strokes(G("grey")(d));
   };
   const a = page(7);
-  assert.ok(textMatch(page(7, 5), a) > G("ENGLISH_FROM"));
-  assert.ok(textMatch(page(99), a) < G("OTHER_TO"));
+  assert.ok(textMatch(page(7, 5), a) > G("LANGUAGE").english);
+  assert.ok(textMatch(page(99), a) < G("LANGUAGE").other);
   assert.equal(textMatch(a, page(7, 0, 230)), null);
 });
 
