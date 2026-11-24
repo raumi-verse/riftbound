@@ -323,14 +323,13 @@ async function matchArt(canvas) {
 }
 
 // ---------- the language ----------
-// The card is known: it's found exactly in the frame (it may lie off centre or tilted), straightened, and its name and
-// rules compared, piece by piece, with its English picture, blurred as the frame may be. A match is English. Text that is
-// sharp and still matches nowhere is another language. Anything else (blur, glare, hardly any text) is unsure: null.
+// The card is known: it's found exactly in the frame (it may lie off centre or tilted), straightened, and each piece of
+// its name and rules compared with the same piece of its English picture, and with other pieces of it as decoys. English
+// text fits its own piece far better than the decoys, however blurred; another language fits them all alike.
 const TEXT = { w: 200, h: 340, dx: 8, dy: 8 }; // cells per card, and how far a piece may be off
 const TEXT_TILES = [0.1, 0.25, 0.4].map((x) => [x, 0.588, 0.15, 0.06])
   .concat([0.665, 0.735, 0.805].flatMap((y) => [0.1, 0.3, 0.5, 0.7].map((x) => [x, y, 0.2, 0.07])));
-// eleven photos, each also blurred, and a webcam's frames: English 0.67 and up, Chinese up to 0.58
-const LANGUAGE = { english: 0.64, other: 0.55, sharp: 0.25 };
+const LANGUAGE = { english: 0.15, other: 0.1 }; // better than the decoys by; 40 photos and frames: English 0.19 up, Chinese to 0.08
 function grey(rgba) {
   const g = new Float32Array(rgba.length / 4);
   for (let i = 0; i < g.length; i++) g[i] = rgba[i * 4] * 0.299 + rgba[i * 4 + 1] * 0.587 + rgba[i * 4 + 2] * 0.114;
@@ -353,28 +352,41 @@ function strokes(g) {
   return s;
 }
 const tileBox = ([fx, fy, fw, fh]) => [Math.floor(fx * TEXT.w), Math.floor(fy * TEXT.h), Math.floor(fw * TEXT.w), Math.floor(fh * TEXT.h)];
-// how well a's text matches b's (strokes of the English picture): 0 to 1, or null without enough text
+// how much better a's text (strokes of a frame) fits b's (of the English picture) than decoys do: {own, decoy, margin},
+// or null without enough text
+const DECOYS = 3;
 function textMatch(a, b) {
-  const { w, h, dx, dy } = TEXT;
-  let total = 0, weight = 0, n = 0;
-  for (const tile of TEXT_TILES) {
-    const [x0, y0, tw, th] = tileBox(tile);
-    let bb = 0;
-    for (let y = 0; y < th; y++) for (let x = 0; x < tw; x++) { const t = b[(y0 + y) * w + x0 + x]; bb += t * t; }
-    const energy = Math.sqrt(bb / (tw * th));
-    if (energy < 6) continue; // no text there
+  const { w, h, dx, dy } = TEXT, boxes = TEXT_TILES.map(tileBox);
+  const energy = boxes.map(([x0, y0, tw, th]) => {
+    let e = 0;
+    for (let y = 0; y < th; y++) for (let x = 0; x < tw; x++) e += b[(y0 + y) * w + x0 + x] ** 2;
+    return Math.sqrt(e / (tw * th));
+  });
+  // the frame's piece t at its best place against the picture's piece r
+  const fit = (t, r) => {
+    const [x0, y0, tw, th] = boxes[t], [rx, ry] = boxes[r], bb = energy[r] ** 2 * tw * th;
     let best = -1, seen = 0;
     for (let oy = -dy; oy <= dy; oy++) for (let ox = -dx; ox <= dx; ox++) {
       if (x0 + ox < 0 || y0 + oy < 0 || x0 + ox + tw > w || y0 + oy + th > h) continue;
       let ab = 0, aa = 0;
-      for (let y = 0; y < th; y++) for (let x = 0, i = (y0 + oy + y) * w + x0 + ox, j = (y0 + y) * w + x0; x < tw; x++, i++, j++) { ab += a[i] * b[j]; aa += a[i] * a[i]; }
+      for (let y = 0; y < th; y++) for (let x = 0, i = (y0 + oy + y) * w + x0 + ox, j = (ry + y) * w + rx; x < tw; x++, i++, j++) { ab += a[i] * b[j]; aa += a[i] * a[i]; }
       const q = ab / (Math.sqrt(bb * aa) + 1e-3);
       if (q > best) { best = q; seen = Math.sqrt(aa / (tw * th)); }
     }
-    if (seen < 1.5) continue; // washed out
-    total += best * energy; weight += energy; n++;
-  }
-  return n < 2 ? null : total / weight;
+    return [best, seen];
+  };
+  let own = 0, decoy = 0, weight = 0, n = 0;
+  boxes.forEach((box, t) => {
+    if (energy[t] < 6) return; // no text there
+    const others = boxes.map((_, r) => (t + r) % boxes.length).filter((r) => r !== t && boxes[r][2] === box[2] && boxes[r][3] === box[3] && energy[r] >= 6).slice(0, DECOYS);
+    if (!others.length) return;
+    const [q, seen] = fit(t, t);
+    if (seen < 1.5) return; // washed out
+    own += q * energy[t];
+    decoy += others.reduce((s, r) => s + fit(t, r)[0], 0) / others.length * energy[t];
+    weight += energy[t]; n++;
+  });
+  return n < 2 ? null : { own: own / weight, decoy: decoy / weight, margin: (own - decoy) / weight };
 }
 // how fine the detail of the text area is: lower when blurred
 function detail(g, b) {
@@ -390,6 +402,33 @@ function detail(g, b) {
   }
   all.sort((p, q) => p - q);
   return all.length ? all[all.length >> 1] : null;
+}
+// Whether the whole card is there: each block of the straightened frame against the picture's. A hand or a dark thing
+// that resembles some art fits few of them.
+const BLOCKS = { w: 90, h: 126, bw: 16, bh: 18, enough: 0.64, middle: 0.71 }; // frames: cards 0.67 / 0.75 up, hands to 0.60 / 0.69
+function blocksFit(a, b) { // grey BLOCKS.w x h, softened
+  const { w, h, bw, bh } = BLOCKS, N = bw * bh, all = [];
+  let total = 0;
+  for (let y0 = 6; y0 + bh <= h - 4; y0 += bh) for (let x0 = 4; x0 + bw <= w - 2; x0 += bw) {
+    let m = 0, bb = 0, best = -1;
+    for (let y = 0; y < bh; y++) for (let x = 0; x < bw; x++) m += b[(y0 + y) * w + x0 + x];
+    m /= N;
+    for (let y = 0; y < bh; y++) for (let x = 0; x < bw; x++) bb += (b[(y0 + y) * w + x0 + x] - m) ** 2;
+    if (Math.sqrt(bb / N) < 9) continue; // plain
+    total++;
+    let white = 0;
+    for (let y = 0; y < bh; y++) for (let x = 0; x < bw; x++) if (a[(y0 + y) * w + x0 + x] > 225 && b[(y0 + y) * w + x0 + x] < 190) white++;
+    if (white > N * 0.25) continue; // glare over it
+    for (let oy = -3; oy <= 3; oy++) for (let ox = -3; ox <= 3; ox++) {
+      if (x0 + ox < 0 || y0 + oy < 0 || x0 + ox + bw > w || y0 + oy + bh > h) continue;
+      let s = 0, ss = 0, ab = 0;
+      for (let y = 0; y < bh; y++) for (let x = 0, i = (y0 + oy + y) * w + x0 + ox, j = (y0 + y) * w + x0; x < bw; x++, i++, j++) { const v = a[i]; s += v; ss += v * v; ab += v * (b[j] - m); }
+      best = Math.max(best, ab / Math.sqrt(bb * Math.max(1e-3, ss - s * s / N)));
+    }
+    all.push(best);
+  }
+  all.sort((p, q) => p - q);
+  return all.length >= total * 0.4 && all.length ? { part: all.filter((q) => q > 0.6).length / all.length, middle: all[all.length >> 1] } : { part: 0, middle: 0 };
 }
 // Where the card lies in the frame: {s, rot, dx, dy} against filling it, by the whole picture at 40 x 56.
 const FIND = { w: 40, h: 56, pw: 80, ph: 112 };
@@ -427,7 +466,7 @@ function pixels(src, w, h, draw) {
   if (draw) draw(g); else g.drawImage(src, 0, 0, w, h);
   return grey(g.getImageData(0, 0, w, h).data);
 }
-const ENGLISH = new Map(); // printing id -> Promise<{find, g, ref: [strokes at each blur]} | null>
+const ENGLISH = new Map(); // printing id -> Promise<{find, blocks, g, sharp, soft} | null>
 function englishText(p) {
   if (!ENGLISH.has(p.id)) ENGLISH.set(p.id, (async () => {
     if (!p.img) return null;
@@ -435,31 +474,42 @@ function englishText(p) {
     img.crossOrigin = "anonymous";
     img.src = p.img;
     await img.decode();
-    const g = pixels(img, TEXT.w, TEXT.h);
-    return { find: pixels(img, FIND.w, FIND.h), g, ref: [g, soften(g, TEXT.w, TEXT.h, 1), soften(soften(g, TEXT.w, TEXT.h, 1), TEXT.w, TEXT.h, 1)].map(strokes) };
+    const g = pixels(img, TEXT.w, TEXT.h), soft = soften(g, TEXT.w, TEXT.h, 1);
+    return { find: pixels(img, FIND.w, FIND.h), blocks: soften(pixels(img, BLOCKS.w, BLOCKS.h), BLOCKS.w, BLOCKS.h, 1), g, sharp: strokes(g), soft: strokes(soft) };
   })().catch(() => { ENGLISH.delete(p.id); return null; }));
   return ENGLISH.get(p.id);
 }
-// {lang: "en", "other" or null (unsure), score, sharp, card: the straightened card for OCR} for a frame showing printing p
+// the card in the frame: {s, rot, dx, dy, q, fits}
+const PLACED = new WeakMap(); // canvas -> {p, at}
+function placeCard(canvas, p, e) {
+  if (PLACED.get(canvas)?.p === p) return PLACED.get(canvas).at;
+  const at = findCard(pixels(canvas, FIND.pw, FIND.ph), e.find), b = blocksFit(soften(straight(canvas, at, BLOCKS.w, BLOCKS.h), BLOCKS.w, BLOCKS.h, 1), e.blocks);
+  at.fits = b.part >= BLOCKS.enough && b.middle >= BLOCKS.middle;
+  at.part = b.part; at.middle = b.middle;
+  PLACED.set(canvas, { p, at });
+  return at;
+}
+// the card of the frame, straightened, as grey w x h
+function straight(canvas, at, w, h) {
+  const W = canvas.width, H = canvas.height;
+  return pixels(null, w, h, (c) => {
+    c.translate(w / 2, h / 2); c.scale(w / W, h / H); c.rotate(-at.rot); c.scale(1 / at.s, 1 / at.s);
+    c.translate(-W / 2 - at.dx * W, -H / 2 - at.dy * H);
+    c.drawImage(canvas, 0, 0);
+  });
+}
+// {lang: "en", "other" or null (unsure), score, sharp, at} for a frame showing printing p
 async function readLanguage(canvas, p, card) {
   const none = { lang: null, score: null, sharp: null };
   if (card.landscape || card.type === "Rune") return none; // the text is elsewhere, or there is none
   const e = await englishText(p);
   if (!e) return none;
-  const at = findCard(pixels(canvas, FIND.pw, FIND.ph), e.find), W = canvas.width, H = canvas.height;
-  if (at.q < 0.4) return none;
-  const g = pixels(null, TEXT.w, TEXT.h, (c) => {
-    c.translate(TEXT.w / 2, TEXT.h / 2); c.scale(TEXT.w / W, TEXT.h / H); c.rotate(-at.rot); c.scale(1 / at.s, 1 / at.s);
-    c.translate(-W / 2 - at.dx * W, -H / 2 - at.dy * H);
-    c.drawImage(canvas, 0, 0);
-  });
-  const full = detail(e.g, e.ref[0]), d = detail(g, e.ref[0]), sharp = full && d != null ? d / full : 0;
-  // print and pixels differ in the finest detail: a sharp frame is compared a little softened
-  const a = strokes(sharp > 0.5 ? soften(g, TEXT.w, TEXT.h, 1) : g);
-  const scores = e.ref.map((b) => textMatch(a, b)).filter((s) => s != null);
-  if (!scores.length) return { ...none, sharp };
-  const score = Math.max(...scores);
-  return { lang: score >= LANGUAGE.english ? "en" : score <= LANGUAGE.other && sharp >= LANGUAGE.sharp ? "other" : null, score, sharp, at };
+  const at = placeCard(canvas, p, e);
+  if (!at.fits) return none;
+  const g = straight(canvas, at, TEXT.w, TEXT.h), full = detail(e.g, e.sharp), d = detail(g, e.sharp), sharp = full && d != null ? d / full : 0;
+  const s = textMatch(strokes(sharp > 0.5 ? soften(g, TEXT.w, TEXT.h, 1) : g), e.soft);
+  if (!s) return { ...none, sharp, at };
+  return { lang: s.margin >= LANGUAGE.english ? "en" : s.margin <= LANGUAGE.other ? "other" : null, score: s.margin, sharp, at };
 }
 
 // Which other language: the rules text of the straightened card is read as each in turn (settings' languages first) till
@@ -600,12 +650,13 @@ function initScan(onAdd) {
   const $s = (q) => dlg.querySelector(q);
   const video = $s("video"), guide = $s(".guide"), hint = $s(".hint"), list = $s(".tally");
   const KEY = "rb-scan-tally";
-  let tally = (() => { try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch { return []; } })(); // [{id, n}]
+  let tally = (() => { try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch { return []; } })(); // a line per card: [{k, id, ver, sure, guess, again}]
+  tally = tally.flatMap((t) => Array.from({ length: t.n || 1 }, () => ({ ...t, n: 1, k: STORE.uid() }))); // older pages counted copies in a line
   const shots = new Map(); // tally line -> {frame, think}: the frame it came from and what the scan thought, till the page closes
   let missed = null; // the newest frame nothing was found in: {frame, think, at}
-  let inOrder = false;
+  let view = "new", checking = false; // view: new | order | check (only what needs a look)
   const pile = $s(".pile");
-  let stream = null, running = false, last = null, armed = true, empties = 0, audio = null;
+  let stream = null, running = false, audio = null;
   const esc = (x) => String(x ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(tally)); } catch { /* */ } };
 
@@ -619,50 +670,72 @@ function initScan(onAdd) {
     navigator.vibrate?.(40);
   }
 
+  const doubt = (t) => !t.sure || t.guess || t.again;
+  const byKey = (el) => tally.find((t) => t.k === el.closest("[data-k]")?.dataset.k);
   function show() {
-    const total = tally.reduce((n, t) => n + t.n, 0);
-    $s(".count").textContent = tally.length ? `${total} card${total === 1 ? "" : "s"}` : "";
-    $s(".addall").disabled = !tally.length;
-    const rows = tally.map((t, i) => [t, i]).reverse();
-    // the order the cards are filed in (fileOrder), and where each goes
+    const n = tally.length, doubts = tally.filter(doubt).length;
+    $s(".count").textContent = n ? `${n} card${n === 1 ? "" : "s"}` : "";
+    $s(".addall").disabled = !n;
+    $s(".check").textContent = doubts ? `Check ${doubts}` : "Check";
+    $s(".check").disabled = !n;
+    dlg.querySelectorAll(".views [data-view]").forEach((b) => { b.setAttribute("aria-pressed", b.dataset.view === view); if (b.dataset.view === "check") b.textContent = `To check ${doubts}`; });
+    let rows = tally.map((t, i) => [t, i]).reverse();
     const place = new Map();
-    if (inOrder) {
-      const f = filing(tally.map((t, k0) => ({ ...t, k0 })), STORE.all("coll").filter((r) => r.data.n > 0).map((r) => r.id));
-      f.forEach((x, i) => place.set(x.k0, { ...x, i }));
-      rows.sort(([, a], [, b]) => (place.get(a)?.i ?? 0) - (place.get(b)?.i ?? 0));
+    if (checking && view === "order") {
+      // the order the cards are filed in (fileOrder), and where each goes
+      const f = filing(tally, STORE.all("coll").filter((r) => r.data.n > 0).map((r) => r.id));
+      f.forEach((x, i) => place.set(x.k, { ...x, i }));
+      rows.sort(([a, i], [b, j]) => (place.get(a.k)?.i ?? 0) - (place.get(b.k)?.i ?? 0) || i - j);
     }
+    if (checking && view === "check") rows = rows.filter(([t]) => doubt(t));
+    const hidden = checking ? 0 : Math.max(0, rows.length - 8); // beside the camera only the newest, so scanning stays quick
     let lastPile = null;
-    $s(".order").setAttribute("aria-pressed", inOrder);
-    list.innerHTML = rows.map(([t, i]) => {
+    list.innerHTML = rows.slice(0, rows.length - hidden).map(([t, i]) => {
       const hit = PRINTS.get(t.id.toUpperCase());
       if (!hit) return "";
       const { card, p } = hit;
-      const opts = card.printings.length > 1 ? `<select data-i="${i}">${card.printings.map((x) => `<option value="${esc(x.id)}"${x.id === p.id ? " selected" : ""}>${esc(x.id)}${x.kind ? ` · ${esc(x.kind)}` : ""}</option>`).join("")}</select>` : `<small>${esc(p.id)}</small>`;
-      const pl = inOrder ? pileOf(card, p) : "", head = pl !== lastPile && pl ? `<li class="pile-head">${pl}</li>` : "";
+      const opts = card.printings.length > 1 ? `<select class="printing" aria-label="Printing">${card.printings.map((x) => `<option value="${esc(x.id)}"${x.id === p.id ? " selected" : ""}>${esc(x.id)}${x.kind ? ` · ${esc(x.kind)}` : ""}</option>`).join("")}</select>` : `<small>${esc(p.id)}</small>`;
+      const pl = place.size ? pileOf(card, p) : "", head = pl !== lastPile && pl ? `<li class="pile-head">${pl}</li>` : "";
       lastPile = pl;
-      return `${head}<li class="${t.sure && !t.guess ? "" : "unsure"}">${p.img ? `<img src="${esc(p.img)}" alt="">` : ""}<span class="nm"><b>${esc(card.name)}</b><span class="sel">${opts}<select data-ver="${i}" aria-label="Version">${Object.entries(VERSIONS).map(([k, l]) => `<option value="${k}"${(t.ver || "") === k ? " selected" : ""}>${l}</option>`).join("")}</select></span>${place.has(i) ? `<small class="place">${placeText(place.get(i))}</small>` : ""}${t.sure ? "" : `<small class="warn">check the printing</small>`}${t.guess ? `<small class="warn">check the language</small>` : ""}</span>
-        <button type="button" class="foil" data-foil="${i}" aria-pressed="${(t.ver || "").endsWith("foil")}" title="Foil" aria-label="Foil">✦</button>
-        <span class="own"><span role="button" data-d="-1" data-i="${i}">−</span><b>${t.n}</b><span role="button" data-d="1" data-i="${i}">+</span></span></li>`;
-    }).join("");
+      const langs = [...new Set([...myLangs(), langOf(t.ver)])];
+      const warn = [t.sure ? "" : "check the printing", t.guess ? "check the language" : "", t.again ? "the same card again, or counted twice?" : ""].filter(Boolean);
+      return `${head}<li data-k="${esc(t.k)}" class="${warn.length ? "unsure" : ""}"><button type="button" class="look" aria-label="Compare with the scan">${p.img ? `<img src="${esc(p.img)}" alt="">` : "?"}</button>
+        <span class="nm"><b>${esc(card.name)}</b><span class="sel">${opts}</span>${place.has(t.k) ? `<small class="place">${placeText(place.get(t.k))}</small>` : ""}${warn.map((w) => `<small class="warn">${w}</small>`).join("")}</span>
+        <span class="vers-btns">${langs.map((l) => `<button type="button" data-lang="${l}" aria-pressed="${langOf(t.ver) === l}" aria-label="${LANGS[l][0]}">${LANGS[l][1]}</button>`).join("")}<button type="button" data-foil aria-pressed="${isFoil(t.ver)}" aria-label="Foil">✦</button></span>
+        ${warn.length ? `<button type="button" class="icon-btn ok" aria-label="It's right" title="It's right">✓</button>` : ""}<button type="button" class="icon-btn drop" aria-label="Take it off the list" title="Take it off the list">✕</button></li>`;
+    }).join("") + (hidden ? `<li class="rest"><button type="button" class="btn text">and ${hidden} more: Check</button></li>` : "")
+      + (checking && !rows.length ? `<li class="empty">${n ? "Nothing left to check." : "No cards scanned yet."}</li>` : "");
   }
   const fixed = (t, kind, right) => {
     const x = shots.get(t.k);
     if (!x) return; // typed, not scanned
-    shots.delete(t.k);
-    CORRECTIONS.add({ kind, got: { id: t.id, ver: t.ver || "" }, right, frame: x.frame, think: x.think }).then(countFixes);
+    if (kind !== "removed" && kind !== "twice") x.done = true;
+    CORRECTIONS.add({ kind, got: { id: t.id, ver: t.ver || "" }, right, again: !!t.again, frame: x.frame, think: x.think }).then(countFixes);
   };
   async function countFixes() { const n = await CORRECTIONS.count(), b = $s(".fixes"); b.hidden = !n; b.textContent = `Corrections ${n}`; }
   function add(m) {
-    const lang = m.lang || langOf(addAs), ver = m.ver ?? verOf(lang, addAs.endsWith("foil")), t = tally.find((x) => x.id === m.id && (x.ver || "") === ver);
-    if (t) { t.n++; t.k ??= STORE.uid(); tally.splice(tally.indexOf(t), 1); tally.push(t); } else tally.push({ k: STORE.uid(), id: m.id, n: 1, sure: m.sure, ver, guess: m.read && !m.lang });
+    const lang = m.lang || langOf(addAs), ver = m.ver ?? verOf(lang, isFoil(addAs));
+    const t = { k: STORE.uid(), id: m.id, n: 1, ver, sure: m.sure, guess: !!(m.read && !m.lang), again: !!m.again };
+    tally.push(t);
     save(); show(); beep();
+    if (m.again) setTimeout(beep, 130); // the same card again sounds different
     if (m.frame) {
-      shots.set(tally.at(-1).k, { frame: m.frame, think: m.think });
-      if (shots.size > 60) shots.delete(shots.keys().next().value);
+      shots.set(t.k, { frame: m.frame, think: m.think });
+      if (shots.size > 150) shots.delete(shots.keys().next().value);
     }
-    hint.textContent = `+1 ${m.card.name} · ${VERSIONS[ver]}${m.read && !m.lang ? "?" : ""}`;
+    const same = tally.filter((x) => x.id === m.id).length;
+    hint.textContent = `+1 ${m.card.name}${same > 1 ? ` (${same})` : ""} · ${VERSIONS[ver]}${t.guess ? "?" : ""}`;
     pile.innerHTML = pileOf(m.card, m.p || PRINTS.get(m.id.toUpperCase()).p);
     pile.hidden = false;
+    $s(".undo-last").hidden = false;
+    return t;
+  }
+  function drop(t) {
+    fixed(t, t.again ? "twice" : "removed", null);
+    const i = tally.indexOf(t);
+    tally.splice(i, 1);
+    save(); show();
+    toast(`${PRINTS.get(t.id.toUpperCase())?.card.name || t.id} taken off`, { undo: () => { tally.splice(Math.min(i, tally.length), 0, t); save(); show(); } });
   }
 
   // the part of the video under the guide, at the camera's resolution
@@ -678,7 +751,9 @@ function initScan(onAdd) {
     c.getContext("2d").drawImage(video, x, y, w, h, 0, 0, c.width, c.height);
     return c;
   }
+  let counted = null; // the card counted last: {id, sure, scene, away, gone}
   async function find(canvas, still = true) {
+    const t0 = performance.now();
     let a = null, m = null, r = { collector: "", name: "" };
     try { a = await matchArt(canvas); } catch { /* offline and never loaded: the text alone */ }
     if (a && artSure(a)) {
@@ -688,7 +763,7 @@ function initScan(onAdd) {
       else if (same.length) {
         // the same picture on several printings: the number decides, else the first one, to be checked
         // not again for the card that was just counted
-        if (!armed && same.some((x) => x.p.id === last)) return { ...hit(same.find((x) => x.p.id === last), true), think: null };
+        if (counted && same.some((x) => x.p.id === counted.id)) return { ...hit(same.find((x) => x.p.id === counted.id), counted.sure), think: null };
         r = still ? await recognize(canvas, { name: false }) : r;
         const read = numberCandidates(r.collector).find((c) => c.read && same.some((x) => x.p.id === c.p.id));
         const first = same.slice().sort((x, y) => (x.p.kind ? 1 : 0) - (y.p.kind ? 1 : 0))[0];
@@ -706,7 +781,7 @@ function initScan(onAdd) {
         if (!m && (!a || r.artUnknown)) { const t = matchScan(r); if (t) m = { ...t, sure: false }; }
       }
     }
-    const think = { collector: r.collector, name: r.name, clear: a?.clear, ahead: a?.ahead,
+    const think = { ms: Math.round(performance.now() - t0), collector: r.collector, name: r.name, clear: a?.clear, ahead: a?.ahead,
       art: a ? [...a.score.keys()].sort((x, y) => a.score[y] - a.score[x]).slice(0, 5).map((i) => [a.ix.ids[i], +a.score[i].toFixed(3)]) : null };
     if (m) m.think = think;
     else if (a && a.score[a.best] > 0.25) { // something like a card was there
@@ -724,21 +799,21 @@ function initScan(onAdd) {
     if (m.think && l?.score != null) { m.think.text = l.score; m.think.sharp = l.sharp; }
     m.read = true;
     if (l?.lang !== "other") return (m.lang = l?.lang || null);
-    const script = await readScript(c, l.at).catch(() => null);
-    if (m.think) m.think.script = script;
-    // the comparison said it isn't English; unread (offline), the language chosen if that's another one
-    m.lang = script || null;
+    // not English: your other language at once, another one if its script says so
+    const mine = (S.languages || []).filter((x) => x !== "en" && LANGS[x]);
+    m.lang = mine[0] || "zh";
+    m.more = readScript(c, l.at).catch(() => null);
     return m.lang;
   }
   function setLanguage(s, c) {
-    const t = s.t, ver = verOf(s.m.lang, isFoil(t.ver));
-    if (!tally.includes(t)) return;
+    const t = s.t;
+    if (!tally.includes(t) || t.hand) return; // gone, or set by hand meanwhile
     t.guess = false;
+    t.ver = verOf(s.m.lang, isFoil(t.ver));
     const x = shots.get(t.k);
-    if (x) { x.frame = snapshot(c); x.think = s.m.think; }
-    hint.textContent = `${s.m.card.name} · ${VERSIONS[ver]}`;
-    if (ver === (t.ver || "")) { save(); show(); return; }
-    if (t.n > 1) { t.n--; const one = { ...t, k: STORE.uid(), n: 1, ver }; if (x) shots.set(one.k, x); tally.push(one); merge(one); } else { t.ver = ver; merge(t); }
+    if (x && !x.done) { x.frame = snapshot(c); x.think = s.m.think; }
+    if (!checking) hint.textContent = `${s.m.card.name} · ${VERSIONS[t.ver]}`;
+    save(); show();
   }
   let reading = false;
   function settleLanguage(c) {
@@ -746,53 +821,69 @@ function initScan(onAdd) {
     if (!s || reading) return;
     if (++s.tries > 8) { settle = null; return; }
     reading = true;
-    language(s.m, c).then((l) => { if (!l) return; if (settle === s) settle = null; setLanguage(s, c); }).finally(() => { reading = false; });
+    language(s.m, c).then((l) => { if (!l) return;
+      if (settle === s) settle = null;
+      setLanguage(s, c);
+      s.m.more?.then((script) => {
+        if (s.m.think) s.m.think.script = script;
+        if (script && script !== "en" && script !== s.m.lang) { s.m.lang = script; setLanguage(s, c); }
+      });
+    }).finally(() => { reading = false; });
   }
-  // how much changed since the frame before (0 to 255)
-  let small = null;
-  function moved(canvas) {
-    const g = pixels(canvas, 24, 34), was = small;
-    small = g;
-    if (!was) return 255;
-    let d = 0;
-    for (let i = 0; i < g.length; i++) d += Math.abs(g[i] - was[i]);
-    return d / g.length;
+  // a frame as 24 x 34 cells, brightness and contrast evened out, and how much two differ (about 0 to 100)
+  function scene(canvas) {
+    const g = pixels(canvas, 24, 34);
+    let m = 0, d = 0;
+    for (const v of g) m += v;
+    m /= g.length;
+    for (const v of g) d += (v - m) ** 2;
+    d = Math.max(12, Math.sqrt(d / g.length));
+    return g.map((v) => (v - m) / d * 40);
   }
+  const differ = (a, b) => { let d = 0; for (let i = 0; i < a.length; i++) d += Math.abs(a[i] - b[i]); return d / a.length; };
+  // A card counts when two frames in a row agree. The card counted last counts again only after it was away: two frames
+  // in a row without it that look different (so not a blurred or shaky one), and then not lying exactly as before (a hand
+  // passing over it). Anyone's guess is right now and then, so those are marked.
   async function loop() {
-    let unsure = 0;
+    let unsure = 0, before = null, seen = null; // counted stays: back from Check the same card may still lie there
     while (running) {
       await new Promise((r) => setTimeout(r, 0)); // let the page breathe
       const c = grab();
       if (!c) { await new Promise((r) => setTimeout(r, 200)); continue; }
-      const still = moved(c) < 6;
+      const now = scene(c), moved = before ? differ(now, before) : 100, still = moved < 8;
+      before = now;
       let m = null;
       try { m = await find(c, still && unsure >= 2); } catch (e) { hint.textContent = e.message; running = false; break; }
       if (!running) break;
+      if (counted && m?.id !== counted.id) {
+        counted.away = differ(now, counted.scene) > 14 ? counted.away + 1 : 0;
+        if (counted.away >= 2) { counted.gone = true; settle = null; }
+      }
       if (!m) {
+        seen = null;
         unsure = still ? unsure + 1 : 0;
         if (unsure > 2) unsure = -4; // read, nothing found: not again right away
-        if (++empties >= 2) { armed = true; last = null; settle = null; }
-        if (armed && !window.SETTINGS?.scanDebug && !hint.textContent.startsWith("Glare")) hint.textContent = "Hold a card in the frame, its bottom edge on the line";
+        if ((!counted || counted.gone) && !window.SETTINGS?.scanDebug && !hint.textContent.startsWith("Glare")) hint.textContent = "Hold a card in the frame, its bottom edge on the line";
         continue;
       }
-      empties = 0; unsure = 0;
-      if (last && m.id !== last) { armed = true; settle = null; } // another card
-      if (last !== m.id) englishText(m.p); // loading while the next frame is taken
-      if (armed && m.id === last) {
-        // not far ahead of the others, the whole picture has to fit too (a dark thing on the table can look like some art)
-        if (m.ahead < 0.22) {
-          const e = await Promise.race([englishText(m.p), new Promise((r) => setTimeout(() => r(null), 600))]);
-          if (e && findCard(pixels(c, FIND.pw, FIND.ph), e.find).q < 0.5) { last = null; continue; }
-        }
-        armed = false;
-        missed = null;
-        m.read = true;
-        m.frame = snapshot(c);
-        add(m);
-        settle = { t: tally.at(-1), m, tries: 0 };
-        settleLanguage(c);
-      } else if (settle && m.id === last && still) settleLanguage(c);
-      last = m.id;
+      unsure = 0;
+      if (seen !== m.id) { seen = m.id; englishText(m.p); continue; } // loading while the next frame is taken
+      const same = counted?.id === m.id;
+      if (same) counted.away = 0;
+      if (same && counted.gone && differ(now, counted.scene) < 5) counted.gone = false; // it never left
+      if (same && !counted.gone) { if (settle && still) settleLanguage(c); continue; }
+      if (!still && m.ahead < 0.3) continue; // still on its way in or out
+      // the whole card has to be there, not just something like its art
+      const e = await Promise.race([englishText(m.p), new Promise((r) => setTimeout(() => r(undefined), 700))]);
+      if (!running) break;
+      if (e ? !m.card.landscape && !placeCard(c, m.p, e).fits : m.ahead < 0.3) { if (e) seen = null; continue; }
+      missed = null;
+      m.read = true;
+      m.again = same;
+      m.frame = snapshot(c);
+      settle = { t: add(m), m, tries: 0 };
+      counted = { id: m.id, sure: m.sure, scene: now, away: 0, gone: false };
+      settleLanguage(c);
     }
   }
 
@@ -804,6 +895,7 @@ function initScan(onAdd) {
       hint.textContent = "No camera (or no permission). A photo or typing the number still works.";
       return;
     }
+    if (checking || !dlg.open) return stop(); // closed while it asked
     video.srcObject = stream;
     await video.play().catch(() => {});
     const track = stream.getVideoTracks()[0];
@@ -813,11 +905,13 @@ function initScan(onAdd) {
     // the pictures are enough to start; the text recognition is only needed when they leave a doubt
     try { await artReady(); ocrWorker().catch(() => {}); } catch { try { await ocrWorker(); } catch (e) { hint.textContent = e.message; return; } }
     hint.textContent = "Hold a card in the frame, its bottom edge on the line";
-    running = true; armed = true; last = null;
+    if (checking || !dlg.open) return stop();
+    running = true;
     loop();
   }
   function stop() {
     running = false;
+    video.srcObject = null;
     stream?.getTracks().forEach((t) => t.stop());
     stream = null;
   }
@@ -837,7 +931,7 @@ function initScan(onAdd) {
     c.width = bmp.width; c.height = bmp.height;
     c.getContext("2d").drawImage(bmp, 0, 0);
     const m = await find(c).catch(() => null);
-    if (m) { m.frame = snapshot(c); await language(m, c); add(m); } else hint.textContent = "Couldn't read that card: crop the photo to the card, or type its number";
+    if (m) { m.frame = snapshot(c); await language(m, c); const t = add(m); m.more?.then((script) => { if (script && script !== "en" && script !== m.lang) { m.lang = script; setLanguage({ t, m }, c); } }); } else hint.textContent = "Couldn't read that card: crop the photo to the card, or type its number";
   };
   $s("form.manual").onsubmit = (e) => {
     e.preventDefault();
@@ -849,35 +943,47 @@ function initScan(onAdd) {
     for (let i = 0; i < Math.max(1, r.n); i++) add({ ...r, sure: true });
     inp.value = "";
   };
-  list.addEventListener("click", (e) => {
-    const b = e.target.closest("[data-d]");
-    if (!b) return;
-    const t = tally[+b.dataset.i];
-    t.n += +b.dataset.d;
-    if (t.n <= 0) fixed(t, "removed", null);
-    if (t.n <= 0) tally.splice(+b.dataset.i, 1);
-    save(); show();
-  });
-  // two lines that became the same printing and version are one
-  function merge(t) {
-    const same = tally.find((x) => x !== t && x.id === t.id && (x.ver || "") === (t.ver || ""));
-    if (same) { same.n += t.n; same.sure ||= t.sure; same.guess &&= t.guess; tally.splice(tally.indexOf(t), 1); }
+  // each row is one card: a change is that card's alone
+  function change(t, ver) {
+    if (langOf(ver) !== langOf(t.ver)) fixed(t, "language", { id: t.id, ver });
+    t.ver = ver; t.hand = true;
+    if (t.guess) t.guess = false;
     save(); show();
   }
   list.addEventListener("click", (e) => {
-    const b = e.target.closest("[data-foil]");
-    if (!b) return;
-    const t = tally[+b.dataset.foil];
-    const ver = verOf(langOf(t.ver), !isFoil(t.ver));
-    if (t.n === 1) { t.ver = ver; return merge(t); }
-    // one of several copies
-    t.n--;
-    const one = { ...t, k: STORE.uid(), n: 1, ver };
-    tally.push(one);
-    merge(one);
+    if (e.target.closest(".rest")) return setChecking(true);
+    const t = byKey(e.target);
+    if (!t) return;
+    const lang = e.target.closest("[data-lang]");
+    if (lang) return lang.dataset.lang === langOf(t.ver) && !t.guess ? undefined : change(t, verOf(lang.dataset.lang, isFoil(t.ver)));
+    if (e.target.closest("[data-foil]")) { t.ver = verOf(langOf(t.ver), !isFoil(t.ver)); save(); return show(); }
+    if (e.target.closest(".ok")) { Object.assign(t, { sure: true, guess: false, again: false, hand: true }); save(); return show(); }
+    if (e.target.closest(".drop")) return drop(t);
+    if (e.target.closest(".look")) compare(t);
   });
+  // the scanned frame beside the card it was taken for
+  function compare(t) {
+    const { card, p } = PRINTS.get(t.id.toUpperCase()), x = shots.get(t.k);
+    sheet({ title: card.name, cls: "wide", html: `<div class="compare">${x ? `<figure><img src="${esc(x.frame)}" alt=""><figcaption>your scan</figcaption></figure>` : ""}<figure>${p.img ? `<img src="${esc(p.img)}" alt="">` : ""}<figcaption>${esc(p.id)}</figcaption></figure></div>${x ? "" : `<p class="note">The scan's picture is only kept until the page is closed.</p>`}` });
+  }
+  $s(".undo-last").onclick = () => {
+    const t = tally.at(-1);
+    $s(".undo-last").hidden = true;
+    if (t) drop(t);
+  };
+  // the list alone, over the whole screen, the camera off
+  function setChecking(on) {
+    checking = on;
+    dlg.classList.toggle("checking", on);
+    if (on) { stop(); settle = null; view = tally.some(doubt) ? "check" : view === "check" ? "new" : view; } else start();
+    show();
+    list.scrollTop = 0;
+  }
+  $s(".check").onclick = () => setChecking(true);
+  $s(".camera").onclick = () => setChecking(false);
+  dlg.querySelectorAll(".views [data-view]").forEach((b) => (b.onclick = () => { view = b.dataset.view; show(); list.scrollTop = 0; }));
   $s(".fixes").onclick = async () => {
-    const all = (await CORRECTIONS.all()).reverse(), KIND = { printing: "wrong printing", language: "wrong language", removed: "taken off the list", missed: "not recognised" };
+    const all = (await CORRECTIONS.all()).reverse(), KIND = { printing: "wrong printing", language: "wrong language", removed: "taken off the list", twice: "counted twice", missed: "not recognised" };
     const label = (x) => (x ? `${PRINTS.get(x.id.toUpperCase())?.card.name || x.id} (${x.id}, ${VERSIONS[x.ver] || x.ver})` : "–");
     const d = sheet({ title: "Corrections", cls: "wide", html: `<p class="note">Scans you corrected, with their picture. They stay in this browser; download them to improve the scan with.</p>
       <div class="row"><button type="button" class="btn filled save">Download</button><button type="button" class="btn text danger-text forget">Forget them</button></div>
@@ -892,26 +998,26 @@ function initScan(onAdd) {
     $(".forget", d).onclick = async () => { if (await ask("Forget these pictures and what was wrong about them?", { yes: "Forget", danger: true })) { await CORRECTIONS.clear(); countFixes(); d.close(); } };
   };
   countFixes();
-  $s(".order").onclick = () => { inOrder = !inOrder; show(); };
   list.addEventListener("change", (e) => {
-    const sel = e.target.closest("select");
-    if (!sel) return;
-    const t = tally[+(sel.dataset.i ?? sel.dataset.ver)];
-    if (sel.dataset.ver !== undefined) {
-      if (langOf(sel.value) !== langOf(t.ver)) fixed(t, "language", { id: t.id, ver: sel.value });
-      t.ver = sel.value; t.guess = false;
-    } else { fixed(t, "printing", { id: sel.value, ver: t.ver || "" }); t.id = sel.value; t.sure = true; }
-    merge(t);
+    const sel = e.target.closest("select.printing"), t = sel && byKey(sel);
+    if (!t) return;
+    fixed(t, "printing", { id: sel.value, ver: t.ver || "" });
+    t.id = sel.value; t.sure = true;
+    save(); show();
   });
   $s(".addall").onclick = () => {
-    onAdd(tally.map(({ id, n, ver }) => ({ id, n, ver: ver || "" })));
-    hint.textContent = `Added ${tally.reduce((n, t) => n + t.n, 0)} cards to the collection`;
-    tally = []; save(); show();
+    const sum = new Map(), n = tally.length;
+    for (const t of tally) { const k = `${t.id} ${t.ver || ""}`, s = sum.get(k); if (s) s.n++; else sum.set(k, { id: t.id, n: 1, ver: t.ver || "" }); }
+    onAdd([...sum.values()]);
+    hint.textContent = `Added ${n} card${n === 1 ? "" : "s"} to the collection`;
+    tally = []; shots.clear(); $s(".undo-last").hidden = true;
+    save(); show();
+    if (checking) { dlg.close(); toast(`Added ${n} card${n === 1 ? "" : "s"}. File shows where they go.`); }
   };
-  $s(".clear").onclick = () => { if (tally.length && confirm("Forget the scanned cards?")) { tally = []; save(); show(); } };
+  $s(".clear").onclick = () => { if (tally.length && confirm("Forget the scanned cards?")) { tally = []; shots.clear(); $s(".undo-last").hidden = true; save(); show(); } };
   $s(".close").onclick = () => dlg.close();
   dlg.addEventListener("close", stop);
 
   show();
-  return () => { dlg.showModal(); start(); };
+  return () => { checking = false; dlg.classList.remove("checking"); dlg.showModal(); show(); start(); };
 }

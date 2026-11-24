@@ -88,8 +88,9 @@ the CSV export has an `own` column. Each printing is counted per language (Engli
   made by `art.py`), in any language and with glare left out; only when that leaves a doubt is the collector line
   (`OGN • 030a/298`) or the name read. Printings with the same picture are told apart by their number, else marked to be checked.
   The language (English, Chinese, French, Korean) is told by comparing the text with the English picture and,
-  if it isn't English, reading its script in the background; blurred or unsure, your choice counts and the line says so. Foil is yours to say (✦). After each card the pile it goes on is shown (domain, rarity); **In order** lists
-  the scanned cards as they are filed, each with the cards it goes between. After **Add all**, **File** keeps that list to tick off.
+  if it isn't English, reading its script in the background; blurred or unsure, your choice counts and the line says so. Foil is yours to say (✦). After each card the pile it goes on is shown (domain, rarity). Every
+  scanned card is a line of its own. **Check** turns the camera off and shows the list over the whole screen: what needs a look, or all
+  in the order they are filed, each with the cards it goes between; a tap on a card's picture shows your scan beside it. After **Add all**, **File** keeps that list to tick off.
   The order: `fileOrder` in `web/settings.js`, then the legends each followed by its signatures, then the battlefields (`sort:file`). Each card beeps into a list
   you check before **Add all**. A card counts again after the frame was empty. Light, a photo, and typing the number are there too.
   Text recognition is [Tesseract.js](https://github.com/naptha/tesseract.js), loaded the first time it's needed and kept offline.

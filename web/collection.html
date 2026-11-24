@@ -34,11 +34,12 @@
   <p class="legal">Riftbound card search isn't endorsed by Riot Games and doesn't reflect the views or opinions of Riot Games or anyone officially involved in producing or managing Riot Games properties. Riot Games, Riftbound, League of Legends and all associated properties are trademarks or registered trademarks of Riot Games, Inc.</p>
 </footer>
 <dialog id="scan" class="scan">
-  <div class="cam"><video playsinline muted></video><div class="guide"><span class="line"></span></div><p class="pile" hidden></p><p class="hint"></p>
+  <div class="cam"><video playsinline muted></video><div class="guide"><span class="line"></span></div><p class="pile" hidden></p><button type="button" class="undo-last" hidden>↶ Undo</button><p class="hint"></p>
     <div class="tools"><button type="button" class="torch" hidden title="Light" aria-label="Light">💡</button><label class="photo" title="Read a photo instead">📷<input type="file" accept="image/*" hidden></label><button type="button" class="close" title="Close">✕</button></div></div>
   <form class="as"><select name="lang" aria-label="Language when the scan can't tell"><option value="en">English</option><option value="zh">Chinese</option><option value="fr">French</option><option value="ko">Korean</option></select><label class="chip-check"><input type="checkbox" name="foil"><span>✦ Foil</span></label></form>
   <form class="manual"><input class="mono" placeholder="or type: ogn 42, OGN-042a, 42 (same set)" spellcheck="false" autocomplete="off" enterkeyhint="done"><button class="btn tonal">Add</button></form>
-  <div class="row"><b class="count"></b><button type="button" class="btn text order" aria-pressed="false" title="The list in the order the cards are filed">In order</button><button type="button" class="btn text fixes" hidden></button><button type="button" class="btn text clear">Clear</button><button type="button" class="btn filled addall" disabled>Add all</button></div>
+  <div class="row"><b class="count"></b><button type="button" class="btn tonal check" disabled>Check</button><button type="button" class="btn text fixes" hidden></button><button type="button" class="btn text clear">Clear</button><button type="button" class="btn filled addall" disabled>Add all</button></div>
+  <div class="views"><button type="button" class="btn tonal camera">‹ Camera</button><button type="button" class="chip-btn" data-view="check">To check</button><button type="button" class="chip-btn" data-view="order">In order</button><button type="button" class="chip-btn" data-view="new">Newest</button></div>
   <ul class="tally"></ul>
 </dialog>
 <dialog id="detail"><div class="big"></div><div class="info"></div></dialog>

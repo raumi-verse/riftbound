@@ -295,9 +295,31 @@ dialog.scan[open] { display: flex; flex-direction: column; gap: 0; }
 .fix-list li { display: flex; gap: 1rem; align-items: center; }
 .fix-list img { width: 84px; border-radius: 8px; }
 .fix-list b, .fix-list small { display: block; }
-.scan .order[aria-pressed="true"] { background: var(--tonal); }
-.scan .foil { width: 44px; height: 44px; flex: none; border: 0; border-radius: 99px; background: var(--raised2); color: var(--overlay); font-size: 18px; cursor: pointer; }
-.scan .foil[aria-pressed="true"] { background: var(--accent); color: var(--crust); }
+.scan .undo-last { position: absolute; left: .6rem; bottom: 2.6rem; min-height: 46px; padding: 0 1.2rem; border: 0; border-radius: 99px; background: var(--text); color: var(--crust); font-weight: 600; cursor: pointer; }
+.scan .views { display: none; gap: .4rem; align-items: center; padding: .6rem .7rem .2rem; flex-wrap: wrap; }
+.scan.checking .views { display: flex; }
+.scan.checking .cam, .scan.checking form, .scan.checking .check { display: none; }
+.scan.checking .views { order: -2; }
+.scan.checking .tally { order: -1; }
+.scan.checking .row { padding-bottom: calc(.7rem + env(safe-area-inset-bottom)); background: var(--mantle); }
+.scan .look { padding: 0; border: 0; background: none; cursor: pointer; flex: none; border-radius: 4px; }
+.scan.checking .tally .look img { height: 6rem; }
+.scan .vers-btns { display: flex; gap: .25rem; flex: none; flex-wrap: wrap; justify-content: flex-end; max-width: 9.5rem; }
+.scan .vers-btns button { min-width: 42px; height: 42px; padding: 0 .4rem; border: 0; border-radius: 12px; background: var(--raised2); color: var(--overlay); font-weight: 650; cursor: pointer; }
+.scan .vers-btns [aria-pressed="true"] { background: var(--accent); color: var(--crust); }
+.scan .ok { color: var(--calm); }
+.scan .tally .rest, .scan .tally .empty { justify-content: center; border: 0; }
+.compare { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: .8rem; }
+.compare figure { margin: 0; text-align: center; color: var(--subtext); }
+.compare img { width: 100%; border-radius: 10px; }
+@media (max-width: 560px) {
+  .scan .tally li[data-k] { display: grid; grid-template: "look nm ok drop" auto "look vers vers vers" auto / auto 1fr auto auto; gap: .15rem .6rem; }
+  .scan .look { grid-area: look; } .scan .nm { grid-area: nm; } .scan .ok { grid-area: ok; } .scan .drop { grid-area: drop; }
+  .scan .vers-btns { grid-area: vers; justify-content: flex-start; max-width: none; }
+  .scan .vers-btns button { height: 38px; }
+  .scan.checking .tally .look img { height: 5.4rem; }
+  .scan .views { gap: .25rem; } .scan .views .chip-btn, .scan .views .btn { padding: 0 .6rem; min-height: 42px; font-size: 14px; }
+}
 .scan .tally .sel { display: flex; gap: .3rem; align-items: center; flex-wrap: wrap; }
 .scan .tally .nm { overflow: hidden; }
 .scan .tally select { max-width: 9rem !important; width: auto; min-height: 34px; padding: 0 .4rem; }

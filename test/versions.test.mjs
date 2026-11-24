@@ -87,8 +87,8 @@ test("text: the same is English, other strokes aren't, none says nothing", () =>
     return strokes(G("grey")(d));
   };
   const a = page(7);
-  assert.ok(textMatch(page(7, 5), a) > G("LANGUAGE").english);
-  assert.ok(textMatch(page(99), a) < G("LANGUAGE").other);
+  assert.ok(textMatch(page(7, 5), a).margin > G("LANGUAGE").english);
+  assert.ok(textMatch(page(99), a).margin < G("LANGUAGE").other);
   assert.equal(textMatch(a, page(7, 0, 230)), null);
 });
 
@@ -127,4 +127,18 @@ test("which language a text is", () => {
   assert.equal(l("Infligez 2 à toutes les unités ennemies au combat. Vous pouvez jouer cette carte."), "fr");
   assert.equal(l("Deal 2 to all enemy units in combat. You may play this from your trash."), "en");
   assert.equal(l("~ |: 2"), null);
+});
+
+test("a card's blocks fit itself, not something else", () => {
+  const { w, h, enough, middle } = G("BLOCKS"), blocksFit = G("blocksFit");
+  const noise = (seed) => { let x = seed; const g = new Float32Array(w * h); for (let i = 0; i < g.length; i++) { x = (x * 1103515245 + 12345) & 0x7fffffff; g[i] = x / 0x7fffffff * 255; } return G("soften")(g, w, h, 2); };
+  const a = noise(3), same = blocksFit(a.map((v) => v * 0.6 + 20), a), other = blocksFit(noise(8), a);
+  assert.ok(same.part >= enough && same.middle >= middle);
+  assert.ok(other.part < enough);
+  // half of it covered by a hand
+  const half = a.map((v, i) => (i % w > w * 0.4 ? 150 + (i % 7) : v));
+  assert.ok(blocksFit(half, a).part < enough);
+});
+test("filing keeps what a line carries", () => {
+  assert.deepEqual(Array.from(filing([{ k: "abc", id: "OGN-011", n: 1 }], []), (x) => x.k), ["abc"]);
 });

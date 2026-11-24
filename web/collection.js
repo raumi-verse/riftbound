@@ -84,8 +84,8 @@ function filing(items, boxed) {
     const k = at.get(i.id), r = all[k], same = (x) => x && x.key[0] === r.key[0];
     let next = k + 1;
     while (next < all.length && !box.has(all[next].id)) next++;
-    return { ...i, card: r.card, p: r.p, pile: r.key[0], already: box.has(i.id), after: same(all[k - 1]) ? near(all[k - 1]) : null, before: same(all[next]) ? near(all[next]) : null, k };
-  }).sort((a, b) => a.k - b.k || String(a.ver || "").localeCompare(String(b.ver || "")));
+    return { ...i, card: r.card, p: r.p, pile: r.key[0], already: box.has(i.id), after: same(all[k - 1]) ? near(all[k - 1]) : null, before: same(all[next]) ? near(all[next]) : null, pos: k };
+  }).sort((a, b) => a.pos - b.pos || String(a.ver || "").localeCompare(String(b.ver || "")));
 }
 
 // The printing a set, number and variant mean: OGN 42 -> OGN-042, SFD R1 -> SFD-R01, OGN 300* (or s) signed
