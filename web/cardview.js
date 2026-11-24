@@ -70,8 +70,10 @@ function imgSrc(r) { return r.p.img || r.printings.find((p) => p.img)?.img; }
 // which version − and + count: chosen on the collection page, plain English elsewhere
 let addAs = "";
 const versNote = (id) => Object.keys(VERSIONS).filter((k) => k && COLL.v(id, k)).map((k) => `${COLL.v(id, k)} ${VER_SHORT[k]}`).join(" · ");
+// the languages to offer: settings' and the one chosen now
+const myLangs = () => [...(S.languages || ["en", "zh"]), langOf(addAs)];
 // every version of a printing on its own, in the card dialog
-const versionRows = (id) => `<div class="versions" data-id="${esc(id)}">${Object.entries(VERSIONS).map(([k, l]) => `<span class="ver"><span>${l}</span><span class="own" data-own="${esc(id)}" data-ver="${k}"><span role="button" data-d="-1" title="One less">−</span><b>${COLL.v(id, k)}</b><span role="button" data-d="1" title="One more">+</span></span></span>`).join("")}</div>`;
+const versionRows = (id) => `<div class="versions" data-id="${esc(id)}">${Object.entries(VERSIONS).filter(([k]) => myLangs().includes(langOf(k)) || COLL.v(id, k)).map(([k, l]) => `<span class="ver"><span>${l}</span><span class="own" data-own="${esc(id)}" data-ver="${k}"><span role="button" data-d="-1" title="One less">−</span><b>${COLL.v(id, k)}</b><span role="button" data-d="1" title="One more">+</span></span></span>`).join("")}</div>`;
 const ownCtl = (id) => {
   const n = COLL.n(id);
   return `<span class="own${n ? "" : " none"}" data-own="${esc(id)}"><span role="button" tabindex="-1" data-d="-1" title="One less">−</span><b>${n}</b><span class="vers">${versNote(id)}</span><span role="button" tabindex="-1" data-d="1" title="One more (hover and press +)">+</span></span>`;

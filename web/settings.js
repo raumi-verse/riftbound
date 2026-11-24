@@ -8,6 +8,9 @@ window.SETTINGS = {
   playTarget: 8,
   playFaceToFace: false,
 
+  // Your cards' languages, offered in the card dialog (en, zh, fr, ko). Others show once you have some.
+  languages: ["en", "zh"],
+
   // Scanning: show what the text recognition read in each frame (for tuning).
   scanDebug: false,
 

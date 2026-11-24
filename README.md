@@ -81,21 +81,21 @@ in the same turn.
 `collection.html`: how full each set is, and a set's binder with − count + on every printing (All, Owned, Missing; hover a card and
 press `+` or `−`). The search shows a badge on cards you have, counts per printing in the card dialog, and knows your collection:
 `own>=3` (copies in any printing), `own:0`, `ownp>=1 is:alt` (the alt arts you have), `is:owned`, `is:missing`, `sort:-own`, and
-the CSV export has an `own` column. Each printing is counted as English, English foil, Chinese and Chinese
-foil: **+ adds** says which one the tiles' + means, the card dialog has all four (`is:foil`, `is:chinese`). **Add cards**:
+the CSV export has an `own` column. Each printing is counted per language (English, Chinese, French, Korean) and foil:
+**+ adds** says which one the tiles' + means, the card dialog has the `languages` of `web/settings.js` (`is:foil`, `is:chinese`, `is:french`, `is:korean`). **Add cards**:
 
 - **Scan**: on a phone, hold cards into the frame one after another. The art is compared with every printing's (`web/art.js`,
   made by `art.py`), in any language and with glare left out; only when that leaves a doubt is the collector line
   (`OGN • 030a/298`) or the name read. Printings with the same picture are told apart by their number, else marked to be checked.
-  English or Chinese is told by comparing the text with the English picture; unsure, your choice
-  counts and the line says so. Foil is yours to say (✦). After each card the pile it goes on is shown (domain, rarity); **In order** lists
+  The language (English, Chinese, French, Korean) is told by comparing the text with the English picture and,
+  if it isn't English, reading its script in the background; blurred or unsure, your choice counts and the line says so. Foil is yours to say (✦). After each card the pile it goes on is shown (domain, rarity); **In order** lists
   the scanned cards as they are filed, each with the cards it goes between. After **Add all**, **File** keeps that list to tick off.
   The order: `fileOrder` in `web/settings.js`, then the legends each followed by its signatures, then the battlefields (`sort:file`). Each card beeps into a list
   you check before **Add all**. A card counts again after the frame was empty. Light, a photo, and typing the number are there too.
   Text recognition is [Tesseract.js](https://github.com/naptha/tesseract.js), loaded the first time it's needed and kept offline.
   Nothing learns from use, but a scan you correct (printing, language, taken off, or typed after it found nothing) is kept with its
   picture in this browser, under **Corrections**, to download and tune the scan with. `scanDebug: true` in `web/settings.js` shows what each frame gave.
-- **Quick entry**: `ogn 42`, `OGN-042a x2`, `3x sfd 7`, `sfd r01 -1`, then a number alone for the same set; `zh` and `foil` at the end for those.
+- **Quick entry**: `ogn 42`, `OGN-042a x2`, `3x sfd 7`, `sfd r01 -1`, then a number alone for the same set; `zh`, `fr`, `ko` and `foil` at the end for those.
 - **Paste a list**: quick entries, printing ids, `3 Name` lines, a CSV with an `id` and an `own`/`count` column (this page's
   export), or a deck code; add to what you have or replace the counts, with a preview and undo.
 

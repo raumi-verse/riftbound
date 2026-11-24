@@ -283,7 +283,7 @@ loadOwned();
 STORE.on((kinds) => {
   if (!kinds.has("coll")) return;
   loadOwned();
-  if (/\bownp?[:=<>!]|is:(owned|missing|foil|chinese)|sort:\S*own|order:\S*own/i.test($("#q").value)) render();
+  if (/\bownp?[:=<>!]|is:(owned|missing|foil|chinese|french|korean)|sort:\S*own|order:\S*own/i.test($("#q").value)) render();
   else document.querySelectorAll("#results .card").forEach((el) => {
     const r = current.sections[el.closest("[data-s]").dataset.s].rows[el.dataset.i], b = $(".have", el), n = haveN(r);
     if (b) b.remove();

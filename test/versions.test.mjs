@@ -29,6 +29,8 @@ test("typed and pasted versions", () => {
   assert.equal(parseEntry("ogn 7 x2 zh foil").ver, "zh-foil");
   assert.equal(parseEntry("ogn 7 foil").ver, "foil");
   assert.equal(parseEntry("ogn 7 cn").ver, "zh");
+  assert.equal(parseEntry("ogn 7 fr foil").ver, "fr-foil");
+  assert.equal(parseEntry("ogn 7 korean").ver, "ko");
   assert.equal(parseEntry("ogn 7 en").ver, "");
   assert.equal(parseEntry("ogn 7").ver, undefined);
   const name = G("CARDS").find((c) => c.id === id).name;
@@ -116,4 +118,13 @@ test("filing: between which cards", () => {
   const b = CARDS.find((c) => c.type === "Battlefield").printings[0].id;
   const alone = filing([{ id: b, n: 1 }], m)[0]; // nothing of another pile is a neighbour
   assert.equal(alone.after, null); assert.equal(alone.before, null);
+});
+
+test("which language a text is", () => {
+  const l = G("languageOfText");
+  assert.equal(l("对战斗中的所有敌方单位各造成2点伤害。"), "zh");
+  assert.equal(l("전투 중인 모든 적 유닛에게 피해를 2 줍니다."), "ko");
+  assert.equal(l("Infligez 2 à toutes les unités ennemies au combat. Vous pouvez jouer cette carte."), "fr");
+  assert.equal(l("Deal 2 to all enemy units in combat. You may play this from your trash."), "en");
+  assert.equal(l("~ |: 2"), null);
 });

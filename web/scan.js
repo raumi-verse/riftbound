@@ -124,16 +124,19 @@ const REGIONS = {
   name: { x: 0.04, y: 0.5, w: 0.92, h: 0.3 },
 };
 const TESSERACT = "https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js";
+async function loadTesseract() {
+  if (!window.Tesseract) {
+    await new Promise((ok, fail) => {
+      const s = document.createElement("script");
+      s.src = TESSERACT; s.onload = ok; s.onerror = () => fail(new Error("couldn't load the text recognition (offline on first use?)"));
+      document.head.append(s);
+    });
+  }
+}
 let ocr = null;
 function ocrWorker() {
   return (ocr ??= (async () => {
-    if (!window.Tesseract) {
-      await new Promise((ok, fail) => {
-        const s = document.createElement("script");
-        s.src = TESSERACT; s.onload = ok; s.onerror = () => fail(new Error("couldn't load the text recognition (offline on first use?)"));
-        document.head.append(s);
-      });
-    }
+    await loadTesseract();
     return Tesseract.createWorker("eng");
   })().catch((e) => { ocr = null; throw e; }));
 }
@@ -227,14 +230,14 @@ function centre(v, out, use, m) {
 const artSure = (a) => a.score[a.best] >= ART_SURE.score && a.ahead >= ART_SURE.ahead && a.score[a.best] + a.ahead >= ART_SURE.both; // a hand over a card: 0.60 + 0.14
 // rgba: the pixels of a w x h picture of the card -> {score: Float32Array per printing, best, ahead, clear}
 // ahead: how far the best is above the best other art; clear: the part of the art free of glare
-const LIKELY = 120; // of the 1400 pictures, this many are compared closely
+const CLOSE_PLACES = 8, LIKELY = 120; // of the 1400 pictures, this many are compared closely
 function artMatch(rgba, w, h, ix) {
   const cells = ix.w * ix.h, N = ix.ids.length, score = new Float32Array(N).fill(-1);
   let clear = 0;
   // each placement of the art in the frame: its cells, which are free of glare
-  const places = [];
-  for (const s of [0.93, 1, 1.07]) for (const dx of [-0.03, 0, 0.03]) for (const dy of [-0.025, 0, 0.025]) {
-    const X0 = (ART.x + ART.w / 2 + dx - ART.w * s / 2) * w, Y0 = (ART.y + ART.h / 2 + dy - ART.h * s / 2) * h, cw = ART.w * s * w / ix.w, ch = ART.h * s * h / ix.h;
+  const place = (s, dx, dy) => {
+    // the card is s times the frame, its middle off by dx, dy
+    const X0 = (0.5 + dx + (ART.x - 0.5) * s) * w, Y0 = (0.5 + dy + (ART.y - 0.5) * s) * h, cw = ART.w * s * w / ix.w, ch = ART.h * s * h / ix.h;
     const glare = new Uint8Array(cells), mask = new Uint8Array(cells), v = new Float32Array(cells * 3);
     for (let cy = 0, k = 0; cy < ix.h; cy++) for (let cx = 0; cx < ix.w; cx++, k++) {
       const x0 = Math.max(0, Math.round(X0 + cx * cw)), x1 = Math.min(w, Math.max(x0 + 1, Math.round(X0 + (cx + 1) * cw)));
@@ -253,8 +256,10 @@ function artMatch(rgba, w, h, ix) {
       free += mask[k];
     }
     clear = Math.max(clear, free / cells);
-    if (free >= cells * 0.2) places.push({ v, mask, trust: Math.min(1, 0.8 + 0.4 * free / cells) }); // less art to go by counts a little less
-  }
+    return free < cells * 0.2 ? null : { s, dx, dy, v, mask, trust: Math.min(1, 0.8 + 0.4 * free / cells) }; // less art to go by counts a little less
+  };
+  const places = [];
+  for (const s of [0.79, 0.86, 0.93, 1, 1.07]) for (const dx of [-0.05, 0, 0.05]) for (const dy of [-0.04, 0, 0.04]) { const pl = place(s, dx, dy); if (pl) places.push(pl); }
   // all pictures at half size
   const n2 = ix.cw * ix.ch, use = new Int32Array(cells * 3), x = new Float32Array(cells * 3);
   for (const pl of places) {
@@ -271,11 +276,18 @@ function artMatch(rgba, w, h, ix) {
       for (let j = 0; j < m; j++) { const k = use[j], p = ix.small[o + k]; sx += p * x[k]; s1 += p; s2 += p * p; }
       const c = pl.trust * sx / (norm * Math.sqrt(Math.max(1e-6, s2 - s1 * s1 / m)));
       if (c > score[i]) score[i] = c;
+      if (c > (pl.best ?? -1)) pl.best = c;
     }
   }
   const likely = Array.from(score.keys()).sort((a, b) => score[b] - score[a]).slice(0, LIKELY), close = new Float32Array(LIKELY).fill(-1);
   // those closely: the picture itself and its local contrast, half each
-  for (const { v, mask, trust } of places) {
+  places.sort((a, b) => (b.best ?? -1) - (a.best ?? -1));
+  // the best placements, and those half a step from the very best
+  const closer = places.slice(0, CLOSE_PLACES), b0 = places.slice(0, 2);
+  for (const b of b0) for (const [s, dx, dy] of [[0.035, 0, 0], [-0.035, 0, 0], [0, 0.025, 0], [0, -0.025, 0], [0, 0, 0.02], [0, 0, -0.02]]) { const pl = place(b.s + s, b.dx + dx, b.dy + dy); if (pl) closer.push(pl); }
+  // and as it's meant to be held, also when haze misleads the quick look
+  for (const s of [0.93, 1, 1.07]) for (const dx of [-0.03, 0, 0.03]) for (const dy of [-0.025, 0, 0.025]) { const pl = place(s, dx, dy + (s - 1) * 0.19); if (pl) closer.push(pl); }
+  for (const { v, mask, trust } of closer) {
     let m = 0;
     for (let k = 0; k < cells; k++) if (mask[k]) for (let c = 0; c < 3; c++) use[m++] = k * 3 + c;
     const z = local(v, ix.w, ix.h, mask), norm = centre(v, x, use, m), zn = centre(z, z, use, m);
@@ -428,7 +440,7 @@ function englishText(p) {
   })().catch(() => { ENGLISH.delete(p.id); return null; }));
   return ENGLISH.get(p.id);
 }
-// {lang: "en", "zh" or null (unsure), score, sharp} for a frame showing printing p
+// {lang: "en", "other" or null (unsure), score, sharp, card: the straightened card for OCR} for a frame showing printing p
 async function readLanguage(canvas, p, card) {
   const none = { lang: null, score: null, sharp: null };
   if (card.landscape || card.type === "Rune") return none; // the text is elsewhere, or there is none
@@ -447,7 +459,49 @@ async function readLanguage(canvas, p, card) {
   const scores = e.ref.map((b) => textMatch(a, b)).filter((s) => s != null);
   if (!scores.length) return { ...none, sharp };
   const score = Math.max(...scores);
-  return { lang: score >= LANGUAGE.english ? "en" : score <= LANGUAGE.other && sharp >= LANGUAGE.sharp ? "zh" : null, score, sharp, at };
+  return { lang: score >= LANGUAGE.english ? "en" : score <= LANGUAGE.other && sharp >= LANGUAGE.sharp ? "other" : null, score, sharp, at };
+}
+
+// Which other language: the rules text of the straightened card is read as each in turn (settings' languages first) till
+// one fits. Read as the wrong script Tesseract is unsure of itself (photos: 39 % at most, the right one 49 % and up).
+// Its data, a few MB a language, is loaded the first time a card isn't English.
+const READ_AS = { zh: ["chi_sim", 45], ko: ["kor", 50], fr: ["fra", 60] };
+const langWorkers = new Map();
+function langWorker(code) {
+  if (!langWorkers.has(code)) langWorkers.set(code, (async () => { await loadTesseract(); return Tesseract.createWorker(code); })().catch((e) => { langWorkers.delete(code); throw e; }));
+  return langWorkers.get(code);
+}
+function languageOfText(text) {
+  const n = (re) => (text.match(re) || []).length;
+  const han = n(/[一-鿿]/g), hangul = n(/[가-힯]/g), latin = n(/[a-zà-öø-ÿœ]/gi);
+  if (hangul >= 5 && hangul > han) return "ko";
+  if (han >= 5 && han > hangul && han * 2 > latin) return "zh";
+  const french = n(/(?<![a-zà-ÿ])(le|la|les|un|une|des|du|de|et|ou|vous|votre|vos|unités?|cartes?|ce|cette|sort|est|en|jouez|piochez|quand|lorsque|que|au|aux|sur|pour|avec|je|me)(?![a-zà-ÿ])/gi) + n(/[éèêàçùôîœ]/gi);
+  const english = n(/\b(the|you|your|this|when|units?|cards?|and|of|to|it|play|draw|an|is|with|from|me|my)\b/gi);
+  if (latin >= 15 && french >= 4 && french > english * 1.5) return "fr";
+  if (latin >= 15 && english >= 3 && english > french) return "en";
+  return null;
+}
+async function readLanguages(canvas) {
+  const order = [...new Set([...(S.languages || []), "zh", "fr", "ko"])].filter((l) => READ_AS[l]);
+  for (const l of order) {
+    const [code, sure] = READ_AS[l], { text, confidence } = (await (await langWorker(code)).recognize(canvas)).data, found = languageOfText(text);
+    if (confidence >= sure && (found === l || (found === "en" && l === "fr"))) return found;
+  }
+  return null;
+}
+let langQueue = Promise.resolve();
+// canvas: the frame; at: where the card is in it (findCard)
+function readScript(canvas, at) {
+  const W = canvas.width, H = canvas.height, c = document.createElement("canvas"), cw = 900, ch = Math.round(cw * 88 / 63);
+  const y0 = 0.66, y1 = 0.9; // the rules box
+  c.width = cw; c.height = Math.round(ch * (y1 - y0));
+  const g = c.getContext("2d");
+  g.imageSmoothingQuality = "high";
+  g.translate(cw / 2, ch / 2 - ch * y0); g.scale(cw / W, ch / H); g.rotate(-at.rot); g.scale(1 / at.s, 1 / at.s);
+  g.translate(-W / 2 - at.dx * W, -H / 2 - at.dy * H);
+  g.drawImage(canvas, 0, 0);
+  return (langQueue = langQueue.catch(() => {}).then(() => readLanguages(c)));
 }
 
 const COLLECTOR_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789•·*/-. ";
@@ -599,7 +653,7 @@ function initScan(onAdd) {
   };
   async function countFixes() { const n = await CORRECTIONS.count(), b = $s(".fixes"); b.hidden = !n; b.textContent = `Corrections ${n}`; }
   function add(m) {
-    const lang = m.lang || (addAs.startsWith("zh") ? "zh" : "en"), ver = m.ver ?? verOf(lang, addAs.endsWith("foil")), t = tally.find((x) => x.id === m.id && (x.ver || "") === ver);
+    const lang = m.lang || langOf(addAs), ver = m.ver ?? verOf(lang, addAs.endsWith("foil")), t = tally.find((x) => x.id === m.id && (x.ver || "") === ver);
     if (t) { t.n++; t.k ??= STORE.uid(); tally.splice(tally.indexOf(t), 1); tally.push(t); } else tally.push({ k: STORE.uid(), id: m.id, n: 1, sure: m.sure, ver, guess: m.read && !m.lang });
     save(); show(); beep();
     if (m.frame) {
@@ -629,7 +683,7 @@ function initScan(onAdd) {
     try { a = await matchArt(canvas); } catch { /* offline and never loaded: the text alone */ }
     if (a && artSure(a)) {
       const grp = a.ix.group[a.best], same = a.ix.ids.filter((_, i) => a.ix.group[i] === grp).map((id) => PRINTS.get(id.toUpperCase())).filter(Boolean);
-      const hit = (x, sure) => ({ id: x.p.id, card: x.card, p: x.p, score: a.score[a.best], how: "art", sure });
+      const hit = (x, sure) => ({ id: x.p.id, card: x.card, p: x.p, score: a.score[a.best], ahead: a.ahead, how: "art", sure });
       if (same.length === 1) m = hit(same[0], true);
       else if (same.length) {
         // the same picture on several printings: the number decides, else the first one, to be checked
@@ -663,26 +717,36 @@ function initScan(onAdd) {
     return m;
   }
   // Added at once, with the language chosen; the frames after it settle the language while the card still lies there.
+  // English is told by comparing; anything else is read in the background, after the card is gone if need be.
   let settle = null; // {t, m, tries}
   async function language(m, c) {
     const l = await readLanguage(c, m.p, m.card).catch(() => null);
     if (m.think && l?.score != null) { m.think.text = l.score; m.think.sharp = l.sharp; }
     m.read = true;
-    m.lang = l?.lang;
+    if (l?.lang !== "other") return (m.lang = l?.lang || null);
+    const script = await readScript(c, l.at).catch(() => null);
+    if (m.think) m.think.script = script;
+    // the comparison said it isn't English; unread (offline), the language chosen if that's another one
+    m.lang = script || null;
     return m.lang;
   }
-  async function settleLanguage(c) {
-    const s = settle;
-    if (!s || !tally.includes(s.t) || ++s.tries > 8) { settle = null; return; }
-    if (!(await language(s.m, c))) return;
-    settle = null;
-    s.t.guess = false;
-    const ver = verOf(s.m.lang, (s.t.ver || "").endsWith("foil"));
-    const x = shots.get(s.t.k);
+  function setLanguage(s, c) {
+    const t = s.t, ver = verOf(s.m.lang, isFoil(t.ver));
+    if (!tally.includes(t)) return;
+    t.guess = false;
+    const x = shots.get(t.k);
     if (x) { x.frame = snapshot(c); x.think = s.m.think; }
-    if (ver === (s.t.ver || "")) { save(); show(); return; }
-    if (s.t.n > 1) { s.t.n--; const one = { ...s.t, k: STORE.uid(), n: 1, ver }; if (x) shots.set(one.k, x); tally.push(one); merge(one); } else { s.t.ver = ver; merge(s.t); }
     hint.textContent = `${s.m.card.name} · ${VERSIONS[ver]}`;
+    if (ver === (t.ver || "")) { save(); show(); return; }
+    if (t.n > 1) { t.n--; const one = { ...t, k: STORE.uid(), n: 1, ver }; if (x) shots.set(one.k, x); tally.push(one); merge(one); } else { t.ver = ver; merge(t); }
+  }
+  let reading = false;
+  function settleLanguage(c) {
+    const s = settle;
+    if (!s || reading) return;
+    if (++s.tries > 8) { settle = null; return; }
+    reading = true;
+    language(s.m, c).then((l) => { if (!l) return; if (settle === s) settle = null; setLanguage(s, c); }).finally(() => { reading = false; });
   }
   // how much changed since the frame before (0 to 255)
   let small = null;
@@ -715,14 +779,19 @@ function initScan(onAdd) {
       if (last && m.id !== last) { armed = true; settle = null; } // another card
       if (last !== m.id) englishText(m.p); // loading while the next frame is taken
       if (armed && m.id === last) {
+        // not far ahead of the others, the whole picture has to fit too (a dark thing on the table can look like some art)
+        if (m.ahead < 0.22) {
+          const e = await Promise.race([englishText(m.p), new Promise((r) => setTimeout(() => r(null), 600))]);
+          if (e && findCard(pixels(c, FIND.pw, FIND.ph), e.find).q < 0.5) { last = null; continue; }
+        }
         armed = false;
         missed = null;
         m.read = true;
         m.frame = snapshot(c);
         add(m);
         settle = { t: tally.at(-1), m, tries: 0 };
-        await settleLanguage(c);
-      } else if (settle && m.id === last && still) await settleLanguage(c);
+        settleLanguage(c);
+      } else if (settle && m.id === last && still) settleLanguage(c);
       last = m.id;
     }
   }
@@ -799,7 +868,7 @@ function initScan(onAdd) {
     const b = e.target.closest("[data-foil]");
     if (!b) return;
     const t = tally[+b.dataset.foil];
-    const ver = verOf((t.ver || "").startsWith("zh") ? "zh" : "en", !(t.ver || "").endsWith("foil"));
+    const ver = verOf(langOf(t.ver), !isFoil(t.ver));
     if (t.n === 1) { t.ver = ver; return merge(t); }
     // one of several copies
     t.n--;
@@ -829,7 +898,7 @@ function initScan(onAdd) {
     if (!sel) return;
     const t = tally[+(sel.dataset.i ?? sel.dataset.ver)];
     if (sel.dataset.ver !== undefined) {
-      if (sel.value.startsWith("zh") !== (t.ver || "").startsWith("zh")) fixed(t, "language", { id: t.id, ver: sel.value });
+      if (langOf(sel.value) !== langOf(t.ver)) fixed(t, "language", { id: t.id, ver: sel.value });
       t.ver = sel.value; t.guess = false;
     } else { fixed(t, "printing", { id: sel.value, ver: t.ver || "" }); t.id = sel.value; t.sure = true; }
     merge(t);

@@ -79,7 +79,7 @@ document.addEventListener("keydown", (e) => {
 addAs = recall("rb-add-as", "");
 if (!(addAs in VERSIONS)) addAs = "";
 const asForms = document.querySelectorAll("form.as");
-function showAs() { for (const f of asForms) { f.lang.value = addAs.startsWith("zh") ? "zh" : "en"; f.foil.checked = addAs.endsWith("foil"); } }
+function showAs() { for (const f of asForms) { f.lang.value = langOf(addAs); f.foil.checked = isFoil(addAs); } }
 for (const f of asForms) {
   f.addEventListener("submit", (e) => e.preventDefault());
   f.addEventListener("change", () => { addAs = verOf(f.lang.value, f.foil.checked); remember("rb-add-as", addAs); showAs(); });

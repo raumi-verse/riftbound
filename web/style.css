@@ -228,8 +228,7 @@ ol.versions { display: block; }
 .own .vers { font-size: 11px; white-space: nowrap; padding-right: .2rem; }
 .as { display: flex; align-items: center; gap: .6rem; padding: .7rem 0 0; color: var(--subtext); font-weight: 600; }
 .as > span { white-space: nowrap; }
-.as .seg { flex: 0 1 20rem; }
-.as .seg label span { padding: 0 .5rem; }
+.as select { flex: 0 1 14rem; width: auto; border-radius: 99px; }
 .scan .as { padding: .5rem .7rem 0; }
 .chip-check { position: relative; cursor: pointer; }
 .chip-check input { position: absolute; opacity: 0; }

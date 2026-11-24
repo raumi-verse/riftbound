@@ -13,15 +13,18 @@ const PRINTS = new Map(); // "OGN-042A" -> {card, p}
 for (const c of CARDS) for (const p of c.printings) PRINTS.set(p.id.toUpperCase(), { card: c, p });
 const SET_IDS = new Set([...PRINTS.keys()].map((id) => id.split("-")[0]));
 
-const VERSIONS = { "": "English", foil: "English foil", zh: "Chinese", "zh-foil": "Chinese foil" };
-const VER_SHORT = { "": "EN", foil: "EN ✦", zh: "中", "zh-foil": "中 ✦" };
-const verOf = (lang, foil) => [lang === "zh" ? "zh" : "", foil ? "foil" : ""].filter(Boolean).join("-");
+const LANGS = { en: ["English", "EN"], zh: ["Chinese", "中"], fr: ["French", "FR"], ko: ["Korean", "한"] };
+const verOf = (lang, foil) => [lang in LANGS && lang !== "en" ? lang : "", foil ? "foil" : ""].filter(Boolean).join("-");
+const langOf = (ver) => { const l = String(ver || "").split("-")[0]; return l in LANGS ? l : "en"; };
+const isFoil = (ver) => String(ver || "").endsWith("foil");
+const VERSIONS = Object.fromEntries(Object.entries(LANGS).flatMap(([l, [n]]) => [[verOf(l), n], [verOf(l, true), `${n} foil`]]));
+const VER_SHORT = Object.fromEntries(Object.entries(LANGS).flatMap(([l, [, s]]) => [[verOf(l), s], [verOf(l, true), `${s} ✦`]]));
 // "ogn 42 zh foil": the version words at the end, and the rest; ver undefined without any
 function splitVersion(s) {
   let lang, foil, m;
-  while ((m = s.match(/^(.*\S)\s+(foil|zh|cn|chinese|中文|en|english)$/i))) {
+  while ((m = s.match(/^(.*\S)\s+(foil|zh|cn|chinese|中文|fr|french|ko|kr|korean|한국어|en|english)$/i))) {
     const w = m[2].toLowerCase();
-    if (w === "foil") foil = true; else lang = /^en/.test(w) ? "en" : "zh";
+    if (w === "foil") foil = true; else lang = /^en/.test(w) ? "en" : /^fr/.test(w) ? "fr" : /^(k|한)/.test(w) ? "ko" : "zh";
     s = m[1];
   }
   return { rest: s, ver: lang || foil ? verOf(lang, foil) : undefined };
@@ -142,7 +145,7 @@ function parseBulk(text) {
       const cells = l.match(/("([^"]|"")*"|[^,]*)(,|$)/g).map((c) => c.replace(/,$/, "").replace(/^"|"$/g, "").replace(/""/g, '"'));
       const n = cnt == null ? 1 : parseInt(cells[cnt]) || 0;
       const hit = PRINTS.get((cells[id] || "").toUpperCase());
-      const x = ["foil", "zh", "zh-foil"].map((k) => [k, head.includes(k) ? parseInt(cells[head.indexOf(k)]) || 0 : 0]).filter(([, c]) => c);
+      const x = Object.keys(VERSIONS).filter(Boolean).map((k) => [k, head.includes(k) ? parseInt(cells[head.indexOf(k)]) || 0 : 0]).filter(([, c]) => c);
       if (!x.length || !hit) { if (n) add(hit, n, l); continue; }
       const plain = n - x.reduce((a, [, c]) => a + c, 0);
       if (plain > 0) add(hit, plain, l, "");
