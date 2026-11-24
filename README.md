@@ -87,10 +87,13 @@ foil: **+ adds** says which one the tiles' + means, the card dialog has all four
 - **Scan**: on a phone, hold cards into the frame one after another. The art is compared with every printing's (`web/art.js`,
   made by `art.py`), in any language and with glare left out; only when that leaves a doubt is the collector line
   (`OGN • 030a/298`) or the name read. Printings with the same picture are told apart by their number, else marked to be checked.
-  Choose English or Chinese and foil before scanning (the camera can't tell); each line can be changed. Each card beeps into a list
+  English or Chinese is told by comparing the text with the English picture; unsure, your choice
+  counts and the line says so. Foil is yours to say (✦). After each card the pile it goes on is shown (domain, rarity); **In order** lists
+  the scanned cards as they are filed (`defaultSort`). Each card beeps into a list
   you check before **Add all**. A card counts again after the frame was empty. Light, a photo, and typing the number are there too.
   Text recognition is [Tesseract.js](https://github.com/naptha/tesseract.js), loaded the first time it's needed and kept offline.
-  Nothing learns from use. `scanDebug: true` in `web/settings.js` shows what each frame gave.
+  Nothing learns from use, but a scan you correct (printing, language, taken off, or typed after it found nothing) is kept with its
+  picture in this browser, under **Corrections**, to download and tune the scan with. `scanDebug: true` in `web/settings.js` shows what each frame gave.
 - **Quick entry**: `ogn 42`, `OGN-042a x2`, `3x sfd 7`, `sfd r01 -1`, then a number alone for the same set; `zh` and `foil` at the end for those.
 - **Paste a list**: quick entries, printing ids, `3 Name` lines, a CSV with an `id` and an `own`/`count` column (this page's
   export), or a deck code; add to what you have or replace the counts, with a preview and undo.

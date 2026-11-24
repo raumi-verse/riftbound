@@ -288,6 +288,17 @@ dialog.scan[open] { display: flex; flex-direction: column; gap: 0; }
 .scan .tally img { height: 3.2rem; border-radius: 3px; }
 .scan .tally .nm { flex: 1; display: grid; gap: .1rem; min-width: 0; }
 .scan .tally select { font: inherit; font-size: 12px; background: var(--surface0); color: var(--text); border: 0; border-radius: 4px; max-width: 100%; }
+.scan .pile { position: absolute; left: .6rem; top: .6rem; margin: 0; padding: .5rem 1rem; border-radius: 99px; background: #000d; color: #fff; font-size: 20px; }
+.scan .pile-head { font-size: 17px; border: 0 !important; padding-top: .9rem !important; }
+.scan .tally .pile-head img, .scan .pile img { height: 1.2em; }
+.scan .row { flex-wrap: wrap; row-gap: 0; }
+.fix-list { list-style: none; margin: 1rem 0 0; padding: 0; display: grid; gap: .8rem; }
+.fix-list li { display: flex; gap: 1rem; align-items: center; }
+.fix-list img { width: 84px; border-radius: 8px; }
+.fix-list b, .fix-list small { display: block; }
+.scan .order[aria-pressed="true"] { background: var(--tonal); }
+.scan .foil { width: 44px; height: 44px; flex: none; border: 0; border-radius: 99px; background: var(--raised2); color: var(--overlay); font-size: 18px; cursor: pointer; }
+.scan .foil[aria-pressed="true"] { background: var(--accent); color: var(--crust); }
 .scan .tally .sel { display: flex; gap: .3rem; align-items: center; flex-wrap: wrap; }
 .scan .tally .nm { overflow: hidden; }
 .scan .tally select { max-width: 9rem !important; width: auto; min-height: 34px; padding: 0 .4rem; }

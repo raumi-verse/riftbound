@@ -71,3 +71,21 @@ test("no card, no match", () => {
 test("every printing in the index exists", () => {
   for (const i of ix.ids) assert.ok(G("PRINTS").has(i.toUpperCase()), i);
 });
+
+test("text: the same is English, other strokes aren't, none says nothing", () => {
+  const strokes = G("strokes"), textMatch = G("textMatch"), { w, h } = G("TEXT");
+  const page = (seed, shift = 0, ink = 20) => {
+    const d = new Uint8ClampedArray(w * h * 4).fill(230);
+    let s = seed;
+    const rnd = () => (s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+    for (let k = 0; k < 900; k++) {
+      const x = Math.floor(20 + rnd() * 155) + shift, y = Math.floor(195 + rnd() * 100) + shift, len = 2 + Math.floor(rnd() * 5), up = rnd() < 0.5;
+      for (let i = 0; i < len; i++) for (let c = 0; c < 3; c++) d[((y + (up ? i : 0)) * w + x + (up ? 0 : i)) * 4 + c] = ink;
+    }
+    return strokes(d);
+  };
+  const a = page(7);
+  assert.ok(textMatch(page(7, 5), a) > G("ENGLISH_FROM"));
+  assert.ok(textMatch(page(99), a) < G("OTHER_TO"));
+  assert.equal(textMatch(a, page(7, 0, 230)), null);
+});
