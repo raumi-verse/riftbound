@@ -1,12 +1,15 @@
 """The sync server over real HTTP on a free port with a fresh database: python3 -m unittest discover test"""
+import base64
 import json
 import sys
 import tempfile
 import threading
+import time
 import unittest
 import urllib.error
 import urllib.parse
 import urllib.request
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -58,7 +61,7 @@ class Server(unittest.TestCase):
         self.assertEqual(self.call("POST", "/login", {"name": "ann", "password": "nope"})[0], 401)
         self.assertEqual(self.call("POST", "/login", {"name": "nobody", "password": "x"})[0], 401)
         t = self.login("ANN", "secret-ann")  # names ignore case
-        self.assertEqual(self.call("GET", "/me", token=t)[1], {"name": "ann"})
+        self.assertEqual(self.call("GET", "/me", token=t)[1], {"name": "ann", "passkey": False, "password": True})
         self.assertEqual(self.call("GET", "/me")[0], 401)
         self.assertEqual(self.call("GET", "/me", token="made-up")[0], 401)
         self.assertEqual(self.call("POST", "/logout", token=t)[0], 200)
@@ -201,6 +204,199 @@ class Server(unittest.TestCase):
         with urllib.request.urlopen(req) as r:
             self.assertEqual(r.status, 204)
             self.assertIn("Authorization", r.headers["Access-Control-Allow-Headers"])
+
+
+class Provider(BaseHTTPRequestHandler):
+    """A token endpoint: checks what the server sends for a code and answers with the claims the test put there."""
+    codes, seen = {}, []
+
+    def do_POST(self):
+        q = dict(urllib.parse.parse_qsl(self.rfile.read(int(self.headers["Content-Length"])).decode()))
+        self.seen.append((self.path, q))
+        c = self.codes.pop(q["code"], None)
+        good = c and q["client_secret"] == "shh" and server.s256(q["code_verifier"]) == c["challenge"]
+        part = base64.urlsafe_b64encode(json.dumps(c["claims"]).encode()).rstrip(b"=").decode() if good else ""
+        body = json.dumps({"id_token": f"e30.{part}.sig"} if good else {"error": "invalid_grant"}).encode()
+        self.send_response(200 if good else 400)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, *a):
+        pass
+
+
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *a):
+        return None
+
+
+ISSUER, BACK = "https://id.example", "https://rb.raumi.dev/search/login.html"
+
+
+class Passkeys(Server):
+    def setUp(self):
+        super().setUp()
+        self.idp = HTTPServer(("127.0.0.1", 0), Provider)
+        threading.Thread(target=self.idp.serve_forever, daemon=True).start()
+        self.app = self.srv.RequestHandlerClass.app
+        self.app.oidc = server.OIDC(ISSUER, "rb", "shh", "https://api.example", f"http://127.0.0.1:{self.idp.server_address[1]}")
+
+    def tearDown(self):
+        self.idp.shutdown()
+        self.idp.server_close()
+        super().tearDown()
+
+    def start(self, verifier="v" * 43, token=None, **kw):
+        s, b, _ = self.call("POST", "/oidc/start", {"challenge": server.s256(verifier), "return": BACK, **kw}, token)
+        return s, dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(b["url"]).query)) if s == 200 else b
+
+    def callback(self, q):
+        try:
+            with urllib.request.build_opener(NoRedirect).open(f"{self.url}/oidc/callback?" + urllib.parse.urlencode(q)) as r:
+                return r.status, {}
+        except urllib.error.HTTPError as e:
+            with e:
+                loc = e.headers.get("Location") or ""
+                if loc:
+                    self.assertTrue(loc.startswith(BACK + "#"), loc)
+                return e.code, dict(urllib.parse.parse_qsl(loc.partition("#")[2]))
+
+    def provider(self, q, **claims):
+        c = {"iss": ISSUER, "aud": "rb", "exp": time.time() + 60, "nonce": q["nonce"], "sub": "sub-1", "preferred_username": "cleo", **claims}
+        code = f"c{len(Provider.seen)}-{q['state'][:8]}"
+        Provider.codes[code] = {"claims": c, "challenge": q["code_challenge"]}
+        return self.callback({"code": code, "state": q["state"]})
+
+    def finish(self, frag, verifier="v" * 43, token=None):
+        s, b, _ = self.call("POST", "/oidc/finish", {"code": frag.get("code"), "verifier": verifier}, token)
+        return s, b
+
+    def passkey(self, **claims):
+        return self.finish(self.provider(self.start()[1], **claims)[1])
+
+    def test_new_account_and_again(self):
+        self.assertEqual(self.call("GET", "/login/methods")[1], {"passkey": True})
+        _, q = self.start()
+        self.assertEqual((q["redirect_uri"], q["code_challenge_method"], q["client_id"]), ("https://api.example/oidc/callback", "S256", "rb"))
+        status, frag = self.provider(q)
+        self.assertEqual(status, 303)
+        s, b = self.finish(frag)
+        self.assertEqual((s, b["name"]), (200, "cleo"))
+        self.assertEqual(self.call("GET", "/me", token=b["token"])[1], {"name": "cleo", "passkey": True, "password": False})
+        self.assertEqual(self.call("POST", "/login", {"name": "cleo", "password": ""})[0], 401)  # no password, not an empty one
+        s, b = self.passkey(preferred_username="renamed")  # the same person, whatever the name is now
+        self.assertEqual((s, b["name"]), (200, "cleo"))
+
+    def test_codes_and_states_work_once(self):
+        _, q = self.start()
+        _, frag = self.provider(q)
+        self.assertEqual(self.callback({"code": "x", "state": q["state"]})[0], 400)
+        self.assertEqual(self.finish(frag)[0], 200)
+        self.assertEqual(self.finish(frag)[0], 401)
+        self.assertEqual(self.callback({"code": "x", "state": "made-up"})[0], 400)
+
+    def test_wrong_verifier_burns_the_code(self):
+        _, frag = self.provider(self.start()[1])
+        self.assertEqual(self.finish(frag, "w" * 43)[0], 401)
+        self.assertEqual(self.finish(frag)[0], 401)
+
+    def test_expired(self):
+        _, q = self.start()
+        self.app.oidc.states.d = {k: (0, v) for k, (_, v) in self.app.oidc.states.d.items()}
+        self.assertEqual(self.provider(q)[0], 400)
+        _, frag = self.provider(self.start()[1])
+        self.app.oidc.codes.d = {k: (0, v) for k, (_, v) in self.app.oidc.codes.d.items()}
+        self.assertEqual(self.finish(frag)[0], 401)
+
+    def test_bad_claims(self):
+        for bad in ({"nonce": "other"}, {"nonce": None}, {"aud": "another-client"}, {"aud": ["x"]}, {"aud": ["rb", "x"], "azp": "x"},
+                    {"iss": "https://evil.example"}, {"exp": time.time() - 999}, {"exp": None}, {"sub": ""}, {"sub": None}):
+            status, frag = self.provider(self.start()[1], **bad)
+            self.assertEqual((status, "code" in frag, "error" in frag), (303, False, True), bad)
+
+    def test_provider_says_no(self):
+        _, q = self.start()
+        self.assertIn("error", self.callback({"error": "access_denied", "state": q["state"]})[1])
+        _, q = self.start()
+        self.assertIn("error", self.callback({"code": "unknown", "state": q["state"]})[1])
+        _, q = self.start()
+        self.assertIn("error", self.callback({"code": "x", "state": q["state"], "iss": "https://evil.example"})[1])
+
+    def test_return_pages(self):
+        for ok in (BACK, "http://localhost:8000/login.html"):
+            self.assertEqual(self.start(**{"return": ok})[0], 200, ok)
+        for bad in ("https://evil.example/login.html", "https://rb.raumi.dev@evil.example/login.html", "https://rb.raumi.dev.evil.example/login.html",
+                    "https://rb.raumi.dev/search/decks.html", BACK + "#x", BACK + "?x", "null", "javascript:alert(1)//login.html", None, 3,
+                    "https://rb.raumi.dev\\@evil.example/login.html", BACK + "\n"):
+            self.assertEqual(self.start(**{"return": bad})[0], 400, bad)
+        self.assertEqual(self.call("POST", "/oidc/start", {"challenge": "short", "return": BACK})[0], 400)
+
+    def test_taken_name_and_email_never_match(self):
+        s, b = self.passkey(preferred_username="ANN", email="ann@example.org", email_verified=True)
+        self.assertEqual(s, 409)
+        self.assertNotIn("token", b)
+
+    def test_linking_keeps_the_account(self):
+        t = self.login()
+        self.sync(t, 0, [{"kind": "coll", "id": "OGN-001", "data": {"n": 3}, "updated": 100}])
+        tts = self.call("POST", "/tokens", {"label": "TTS"}, t)[1]["token"]
+        self.assertEqual(self.start(link=True)[0], 401)
+        self.assertEqual(self.start(link=True, token=tts)[0], 401)
+        _, frag = self.provider(self.start(link=True, token=t)[1])
+        self.assertEqual(self.finish(frag, token=t)[1], {"name": "ann", "linked": True})
+        s, b = self.passkey()
+        self.assertEqual((s, b["name"]), (200, "ann"))
+        self.assertEqual(self.sync(b["token"])["changes"][0]["data"], {"n": 3})
+        self.assertEqual(self.call("GET", "/tts/decks", token=tts)[0], 200)
+        bob = self.login("bob")  # the same passkey can't go to a second account
+        _, frag = self.provider(self.start(link=True, token=bob)[1])
+        self.assertEqual(self.finish(frag, token=bob)[0], 409)
+
+    def test_link_only_by_the_account_that_asked(self):
+        t = self.login()
+        for other in (None, self.login("bob")):
+            _, frag = self.provider(self.start(link=True, token=t)[1])
+            self.assertEqual(self.finish(frag, token=other)[0], 401)
+        self.assertFalse(self.call("GET", "/me", token=t)[1]["passkey"])
+
+    def test_nopasswd_and_revoke(self):
+        db = self.app.db
+        self.assertIn("no passkey", db.no_password("ann"))
+        t = self.login()
+        _, frag = self.provider(self.start(link=True, token=t)[1])
+        self.finish(frag, token=t)
+        self.assertIsNone(db.no_password("ann"))
+        self.assertEqual(self.call("POST", "/login", {"name": "ann", "password": "secret-ann"})[0], 401)
+        _, b = self.passkey()
+        self.assertTrue(db.revoke("ann"))
+        for x in (t, b["token"]):
+            self.assertEqual(self.call("GET", "/me", token=x)[0], 401)
+        self.assertEqual(self.passkey(preferred_username="ann")[0], 409)  # no way back by making the account anew
+        db.set_password("ann", "back-again")
+        self.login("ann", "back-again")
+
+    def test_too_many_starts(self):
+        for _ in range(30):
+            self.assertEqual(self.start()[0], 200)
+        self.assertEqual(self.start()[0], 429)
+
+    def test_without_provider(self):
+        self.app.oidc = None
+        self.assertEqual(self.call("GET", "/login/methods")[1], {"passkey": False})
+        self.assertEqual(self.start()[0], 404)
+        self.assertEqual(self.callback({"state": "x"})[0], 400)
+        self.assertEqual(self.finish({"code": "x"})[0], 401)
+        self.assertIsNone(server.OIDC.from_env({}))
+
+    def test_older_database(self):
+        p = str(Path(self.dir.name) / "old.sqlite")
+        db = server.DB(p)
+        db.add_user("old", "secret-old")
+        db.conn().execute("drop table identities")
+        again = server.DB(p)
+        self.assertFalse(again.linked(1))
+        self.assertEqual(again.one("select name from users")["name"], "old")
 
 
 if __name__ == "__main__":

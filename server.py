@@ -3,14 +3,20 @@
 
     python3 server.py adduser NAME         # asks for a password (or reads one line from stdin when piped)
     python3 server.py passwd NAME
+    python3 server.py nopasswd NAME        # passkey only (it must have one); passwd NAME gives it a password again
+    python3 server.py revoke NAME          # ends every session and table token, unlinks the passkey, no password
     python3 server.py users
     python3 server.py serve [--port 8080] [--db rb.sqlite] [--proxy]
 
 Standard library only. The server mostly doesn't understand the data: the page keeps typed records (kind, id, data)
 and /sync swaps changes both ways, newest edit wins per record. Each user has their own records; accounts are made
-here, there is no sign-up.
+here, or by the first passkey login of someone the OpenID provider (Pocket ID) lets in.
 
     POST /login   {name, password, label?}         -> {token, name}
+    GET  /login/methods                            -> {passkey: bool}
+    POST /oidc/start {challenge, return, link?}    -> {url}     the provider's login page; link: to the logged in account
+    GET  /oidc/callback                            the provider sends the browser back here, it goes on to return#code=…
+    POST /oidc/finish {code, verifier}             -> {token, name}
     POST /logout                                   (the token used)
     GET  /me                                       -> {name}
     POST /sync    {since, changes:[{kind, id, data, updated, deleted}]}  -> {changes, cursor, more}
@@ -22,9 +28,12 @@ here, there is no sign-up.
 
 Tokens go in "Authorization: Bearer …". A table token ("tts") only opens /tts/… .
 --proxy trusts the client address in CF-Connecting-IP / X-Forwarded-For (behind Caddy or a Cloudflare Tunnel).
+Passkeys: RB_OIDC_ISSUER, RB_OIDC_CLIENT_ID, RB_OIDC_CLIENT_SECRET, RB_PUBLIC_URL (this server's address), and
+RB_OIDC_INTERNAL (the provider's address from here, if not the issuer's). Without them there are only passwords.
 Allowed page origins: RB_ORIGINS (comma separated, default https://rb.raumi.dev), plus localhost and file:// pages.
 """
 import argparse
+import base64
 import getpass
 import hashlib
 import hmac
@@ -37,8 +46,10 @@ import sqlite3
 import sys
 import threading
 import time
+import urllib.error
+import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import unquote, urlsplit
+from urllib.parse import parse_qs, unquote, urlencode, urlsplit
 
 MAX_BODY = 8 << 20  # a full sync of years of matches stays far below this
 PAGE = 2000  # records per /sync answer; the page asks again while "more"
@@ -53,6 +64,8 @@ create table if not exists tokens (id integer primary key, user integer not null
 create table if not exists records (user integer not null references users(id) on delete cascade,
     kind text not null, id text not null, data text, updated integer not null, deleted integer not null default 0,
     seq integer not null, primary key (user, kind, id));
+create table if not exists identities (issuer text not null, sub text not null,
+    user integer not null references users(id) on delete cascade, created integer not null, primary key (issuer, sub));
 create index if not exists records_seq on records (user, seq);
 """
 
@@ -125,6 +138,55 @@ class DB:
             c.execute("update users set pw = ? where id = ?", (hash_pw(pw), u["id"]))
             c.execute("delete from tokens where user = ? and scope = 'app'", (u["id"],))  # log out every device
             return True
+
+    def linked(self, user):
+        return self.one("select 1 from identities where user = ?", user) is not None
+
+    def no_password(self, name):
+        """-> None, or why not"""
+        u = self.one("select id from users where name = ?", name)
+        if not u:
+            return f"no user {name}"
+        if not self.linked(u["id"]):
+            return f"{name} has no passkey yet (they add it in the page's account sheet)"
+        with self.write() as c:
+            c.execute("update users set pw = '' where id = ?", (u["id"],))
+
+    def revoke(self, name):
+        """Locked out everywhere; the records stay. The provider may still let them in there, but the name is taken."""
+        with self.write() as c:
+            u = c.execute("select id from users where name = ?", (name,)).fetchone()
+            if not u:
+                return False
+            c.execute("delete from tokens where user = ?", (u["id"],))
+            c.execute("delete from identities where user = ?", (u["id"],))
+            c.execute("update users set pw = '' where id = ?", (u["id"],))
+            return True
+
+    def identity(self, issuer, sub, name, link=None):
+        """The account of a passkey login. Only (issuer, sub) identifies anyone: names and emails can be changed at
+        the provider. link: the logged in account this identity is added to."""
+        with self.write() as c:
+            row = c.execute("select u.id, u.name from identities i join users u on u.id = i.user where issuer = ? and sub = ?",
+                            (issuer, sub)).fetchone()
+            if row and link and row["id"] != link:
+                raise HTTPError(409, f"this passkey already belongs to {row['name']}")
+            if row:
+                return row["id"], row["name"]
+            if link:
+                u = c.execute("select id, name from users where id = ?", (link,)).fetchone()
+                if not u:
+                    raise HTTPError(401, "not logged in")
+                uid, name = u["id"], u["name"]
+            else:
+                name = re.sub(r"[^\w .-]", "", name).strip()[:40]
+                if not name:
+                    raise HTTPError(400, "the login has no username")
+                if c.execute("select 1 from users where name = ?", (name,)).fetchone():
+                    raise HTTPError(409, f"there is already an account {name}: log in with its password, then add the passkey there")
+                uid = c.execute("insert into users (name, pw, created) values (?, '', ?)", (name, now_ms())).lastrowid
+            c.execute("insert into identities (issuer, sub, user, created) values (?, ?, ?, ?)", (issuer, sub, uid, now_ms()))
+            return uid, name
 
     # tokens
     def new_token(self, user, scope, label):
@@ -255,12 +317,93 @@ class Tx:
         self.c.execute("rollback" if exc else "commit")
 
 
+# --- passkey login (OpenID Connect, authorization code with PKCE) ------------------------------------------------
+
+def b64url(b):
+    return base64.urlsafe_b64encode(b).rstrip(b"=").decode()
+
+
+def s256(verifier):
+    return b64url(hashlib.sha256(verifier.encode()).digest())
+
+
+class Once:
+    """Values handed out once, for a while, kept in memory (a restart only means logging in again)."""
+
+    def __init__(self, ttl, most=2000):
+        self.ttl, self.most, self.d, self.lock = ttl, most, {}, threading.Lock()
+
+    def put(self, value):
+        k, now = secrets.token_urlsafe(32), time.time()
+        with self.lock:
+            self.d = {i: x for i, x in self.d.items() if x[0] > now}
+            if len(self.d) >= self.most:
+                raise HTTPError(429, "too many logins at once, try again later")
+            self.d[k] = (now + self.ttl, value)
+        return k
+
+    def take(self, k):
+        with self.lock:
+            until, value = self.d.pop(k, (0, None))
+        return value if until > time.time() else None
+
+
+class OIDC:
+    """The client's secret stays here. The page only gets a code at its return address, worth something only together
+    with the verifier it kept, so neither a stolen code nor somebody else's login link gets anyone a session."""
+
+    def __init__(self, issuer, client_id, secret, public, internal=None):
+        self.issuer, self.client_id, self.secret = issuer.rstrip("/"), client_id, secret
+        self.callback = public.rstrip("/") + "/oidc/callback"
+        self.token_url = (internal or issuer).rstrip("/") + "/api/oidc/token"
+        self.states, self.codes = Once(600), Once(60)
+
+    @classmethod
+    def from_env(cls, env=os.environ):
+        v = [env.get(k, "").strip() for k in ("RB_OIDC_ISSUER", "RB_OIDC_CLIENT_ID", "RB_OIDC_CLIENT_SECRET", "RB_PUBLIC_URL")]
+        return cls(*v, env.get("RB_OIDC_INTERNAL", "").strip() or None) if all(v) else None
+
+    def start(self, challenge, ret, link):
+        nonce, verifier = secrets.token_urlsafe(24), secrets.token_urlsafe(48)
+        state = self.states.put({"challenge": challenge, "return": ret, "link": link, "nonce": nonce, "verifier": verifier})
+        return f"{self.issuer}/authorize?" + urlencode({
+            "response_type": "code", "client_id": self.client_id, "redirect_uri": self.callback, "scope": "openid profile",
+            "state": state, "nonce": nonce, "code_challenge": s256(verifier), "code_challenge_method": "S256"})
+
+    def claims(self, code, st):
+        body = urlencode({"grant_type": "authorization_code", "code": code, "redirect_uri": self.callback, "client_id": self.client_id,
+                          "client_secret": self.secret, "code_verifier": st["verifier"]}).encode()
+        req = urllib.request.Request(self.token_url, data=body, headers={"Content-Type": "application/x-www-form-urlencoded",
+                                                                          "Accept": "application/json", "User-Agent": "rb-sync"})
+        try:
+            with urllib.request.urlopen(req, timeout=10) as r:
+                c = json.loads(r.read(1 << 20))["id_token"].split(".")[1]
+            c = json.loads(base64.urlsafe_b64decode(c + "=" * (-len(c) % 4)))
+        except (OSError, ValueError, KeyError, IndexError, AttributeError, TypeError):
+            raise HTTPError(502, "the login couldn't be checked, try again")
+        # The token comes straight from the provider's token endpoint, over a network of just the two, so its signature
+        # needs no checking (OpenID Connect Core 3.1.3.7); who it is from and for does.
+        aud = c.get("aud") if isinstance(c, dict) else None
+        ok = (isinstance(c, dict) and c.get("iss") == self.issuer
+              and (aud == self.client_id or (isinstance(aud, list) and self.client_id in aud and c.get("azp", self.client_id) == self.client_id))
+              and isinstance(c.get("exp"), (int, float)) and c["exp"] > time.time() - 30
+              and isinstance(c.get("nonce"), str) and hmac.compare_digest(c["nonce"].encode(), st["nonce"].encode())
+              and isinstance(c.get("sub"), str) and c["sub"])
+        if not ok:
+            raise HTTPError(401, "the login wasn't valid, try again")
+        return c
+
+
 # --- HTTP -------------------------------------------------------------------------------------------------------
 
 class HTTPError(Exception):
     def __init__(self, status, msg):
         super().__init__(msg)
         self.status = status
+
+
+class Redirect(Exception):
+    pass
 
 
 def clean_change(ch, now):
@@ -279,12 +422,16 @@ def clean_change(ch, now):
 
 
 class App:
-    def __init__(self, db, origins=("https://rb.raumi.dev",), proxy=False):
-        self.db, self.origins, self.proxy = db, set(origins), proxy
+    def __init__(self, db, origins=("https://rb.raumi.dev",), proxy=False, oidc=None):
+        self.db, self.origins, self.proxy, self.oidc = db, set(origins), proxy, oidc
         self.fails, self.fails_lock = {}, threading.Lock()
         self.routes = []  # (method, regex, handler, scopes)
         self.route("GET", r"/health", self.health, None)
         self.route("POST", r"/login", self.login, None)
+        self.route("GET", r"/login/methods", lambda req, tok: {"passkey": self.oidc is not None}, None)
+        self.route("POST", r"/oidc/start", self.oidc_start, None)
+        self.route("GET", r"/oidc/callback", self.oidc_callback, None)
+        self.route("POST", r"/oidc/finish", self.oidc_finish, None)
         self.route("POST", r"/logout", self.logout, {"app", "tts"})
         self.route("GET", r"/me", self.me, {"app"})
         self.route("POST", r"/sync", self.do_sync, {"app"})
@@ -306,19 +453,87 @@ class App:
         self.db.one("select 1")
         return {"ok": True}
 
+    def limit(self, key, tries, text):
+        """The times noted for key in the last LOGIN_TRIES[1] seconds, at most `tries`."""
+        with self.fails_lock:
+            recent = [t for t in self.fails.get(key, []) if t > time.time() - LOGIN_TRIES[1]]
+            self.fails[key] = recent
+            if len(recent) >= tries:
+                raise HTTPError(429, text)
+
+    def note(self, key):
+        with self.fails_lock:
+            self.fails.setdefault(key, []).append(time.time())
+
+    def session(self, req):
+        """The logged in account of a request that may come without one."""
+        h = req.headers.get("Authorization", "")
+        tok = self.db.auth(h[7:].strip()) if h.startswith("Bearer ") else None
+        return tok if tok and tok["scope"] == "app" else None
+
+    def oidc_start(self, req, tok):
+        if not self.oidc:
+            raise HTTPError(404, "this server has no passkey login")
+        key = ("oidc", req.client_ip())
+        self.limit(key, 30, "too many logins, try again later")
+        self.note(key)
+        b = req.json()
+        challenge, ret, link = b.get("challenge"), b.get("return"), None
+        if not isinstance(challenge, str) or not re.fullmatch(r"[\w-]{43}", challenge):
+            raise HTTPError(400, "bad challenge")
+        # back only to a login page of an allowed origin
+        u = re.fullmatch(r"(https?://[^/?#@\\\s]+)(/[\w./-]*)?/login\.html", ret) if isinstance(ret, str) else None
+        if not u or not self.origin_ok(u[1]):
+            raise HTTPError(400, "can't return to that page")
+        if b.get("link"):
+            me = self.session(req)
+            if not me:
+                raise HTTPError(401, "not logged in")
+            link = me["user"]
+        return {"url": self.oidc.start(challenge, ret, link)}
+
+    def oidc_callback(self, req, tok):
+        q = {k: v[0] for k, v in parse_qs(urlsplit(req.path).query).items()}
+        st = self.oidc.states.take(q.get("state", "")) if self.oidc else None
+        if not st:
+            raise HTTPError(400, "this login has expired: go back to the page and start again")
+        try:
+            if q.get("error") or not q.get("code"):
+                raise HTTPError(401, "the login was cancelled")
+            if q.get("iss", self.oidc.issuer) != self.oidc.issuer:
+                raise HTTPError(401, "the login wasn't valid, try again")
+            c = self.oidc.claims(q["code"], st)
+            code = self.oidc.codes.put({"sub": c["sub"], "name": str(c.get("preferred_username") or c.get("name") or ""),
+                                        "challenge": st["challenge"], "link": st["link"]})
+            frag = {"code": code}
+        except HTTPError as e:
+            frag = {"error": str(e)}
+        raise Redirect(st["return"] + "#" + urlencode(frag))
+
+    def oidc_finish(self, req, tok):
+        b = req.json()
+        code, verifier = b.get("code"), b.get("verifier")
+        got = self.oidc.codes.take(code) if self.oidc and isinstance(code, str) else None
+        if not got or not isinstance(verifier, str) or not hmac.compare_digest(s256(verifier), got["challenge"]):
+            raise HTTPError(401, "this login has expired, try again")
+        if got["link"]:  # only for the account that asked, still logged in: a link sent to somebody else adds nothing
+            me = self.session(req)
+            if not me or me["user"] != got["link"]:
+                raise HTTPError(401, "log in again, then add the passkey")
+        uid, name = self.db.identity(self.oidc.issuer, got["sub"], got["name"], got["link"])
+        if got["link"]:
+            return {"name": name, "linked": True}
+        t, _ = self.db.new_token(uid, "app", str(b.get("label") or req.headers.get("User-Agent", ""))[:80])
+        return {"token": t, "name": name}
+
     def login(self, req, tok):
         ip = req.client_ip()
-        with self.fails_lock:
-            recent = [t for t in self.fails.get(ip, []) if t > time.time() - LOGIN_TRIES[1]]
-            self.fails[ip] = recent
-            if len(recent) >= LOGIN_TRIES[0]:
-                raise HTTPError(429, "too many failed logins, try again later")
+        self.limit(ip, LOGIN_TRIES[0], "too many failed logins, try again later")
         b = req.json()
         name, pw = str(b.get("name", "")).strip(), str(b.get("password", ""))
         u = self.db.one("select id, name, pw from users where name = ?", name)
         if not u or not check_pw(pw, u["pw"]):
-            with self.fails_lock:
-                self.fails.setdefault(ip, []).append(time.time())
+            self.note(ip)
             raise HTTPError(401, "wrong name or password")
         t, _ = self.db.new_token(u["id"], "app", str(b.get("label") or req.headers.get("User-Agent", ""))[:80])
         return {"token": t, "name": u["name"]}
@@ -329,7 +544,8 @@ class App:
         return {"ok": True}
 
     def me(self, req, tok):
-        return {"name": tok["name"]}
+        u = self.db.one("select pw != '' p from users where id = ?", tok["user"])
+        return {"name": tok["name"], "passkey": self.db.linked(tok["user"]), "password": bool(u["p"])}
 
     def do_sync(self, req, tok):
         b = req.json()
@@ -387,7 +603,8 @@ class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
     def log_message(self, fmt, *a):  # no request bodies or tokens in the log, just the line
-        sys.stderr.write(f"{self.client_ip()} {fmt % a}\n")
+        line = re.sub(r"\?\S*", "?…", fmt % a)  # nor login codes
+        sys.stderr.write(f"{self.client_ip()} {line}\n")
 
     def client_ip(self):
         if self.app.proxy:
@@ -427,6 +644,13 @@ class Handler(BaseHTTPRequestHandler):
     def run(self, method):
         try:
             self.reply(200, self.app.handle(self, method))
+        except Redirect as e:
+            self.send_response(303)
+            self.send_header("Location", str(e))
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Referrer-Policy", "no-referrer")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
         except HTTPError as e:
             self.reply(e.status, {"error": str(e)})
         except Exception as e:  # keep the connection answering; the details go to the log only
@@ -452,9 +676,9 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
 
 
-def make_server(db_path, host="0.0.0.0", port=8080, origins=None, proxy=False):
+def make_server(db_path, host="0.0.0.0", port=8080, origins=None, proxy=False, oidc=None):
     origins = origins or [o.strip() for o in os.environ.get("RB_ORIGINS", "https://rb.raumi.dev").split(",") if o.strip()]
-    handler = type("H", (Handler,), {"app": App(DB(db_path), origins, proxy)})
+    handler = type("H", (Handler,), {"app": App(DB(db_path), origins, proxy, oidc)})
     srv = ThreadingHTTPServer((host, port), handler)
     srv.daemon_threads = True
     return srv
@@ -479,13 +703,13 @@ def main():
     s.add_argument("--host", default="0.0.0.0")
     s.add_argument("--port", type=int, default=int(os.environ.get("RB_PORT", 8080)))
     s.add_argument("--proxy", action="store_true", default=os.environ.get("RB_PROXY") == "1")
-    for c in ("adduser", "passwd"):
+    for c in ("adduser", "passwd", "nopasswd", "revoke"):
         sub.add_parser(c).add_argument("name")
     sub.add_parser("users")
     a = ap.parse_args()
 
     if a.cmd == "serve":
-        srv = make_server(a.db, a.host, a.port, proxy=a.proxy)
+        srv = make_server(a.db, a.host, a.port, proxy=a.proxy, oidc=OIDC.from_env())
         print(f"rb sync on {a.host}:{srv.server_address[1]}, {a.db}", file=sys.stderr, flush=True)
         # in a container it's process 1, which ignores SIGTERM unless told: stop at once (docker stop, the backup)
         signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
@@ -499,6 +723,15 @@ def main():
         for u in db.all("select name, created, (select count(*) from records r where r.user = users.id and not deleted) n "
                         "from users order by name"):
             print(f"{u['name']}\t{u['n']} records\tsince {time.strftime('%Y-%m-%d', time.localtime(u['created'] / 1000))}")
+        return
+    if a.cmd == "nopasswd":
+        why = db.no_password(a.name)
+        sys.exit(why) if why else print(f"{a.name} logs in with the passkey only")
+        return
+    if a.cmd == "revoke":
+        if not db.revoke(a.name):
+            sys.exit(f"no user {a.name}")
+        print(f"{a.name} is logged out everywhere and can't log in; the records are kept")
         return
     pw = ask_password()
     if len(pw) < 8:
