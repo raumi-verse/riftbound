@@ -6,6 +6,9 @@
 //
 //   COLL.n(id)  COLL.v(id, ver)  COLL.add(id, delta, ver) -> new total  COLL.set(id, n)  COLL.setV(id, ver, n)
 //   COLL.apply([{id, n, ver?}], "add"|"set")      VERSIONS: ver -> name ("" is plain English)
+//   KEEP: how many copies of a card stay in the box       ASIDE: the copies put aside as spares, still in COLL's counts
+//   sortOut(items) -> which of a batch go into the box and which aside      spares() -> what the box and the pile still need
+//   FILING(saved): the batch being filed, ticked and edited               filing(items, boxed): where each goes
 //   parseEntry("ogn 42 3", lastSet) -> {id, n, card, p, set} | {error}     quick entry, one printing per line
 //   parseBulk(text) -> {items: [{id, n, card, p}], problems: [text…]}       lists, ids, CSV, deck codes
 
@@ -42,6 +45,7 @@ function put(id, counts) {
   const n = Object.values(counts).reduce((a, b) => a + b, 0);
   const x = Object.fromEntries(Object.entries(counts).filter(([k, c]) => k && c));
   if (n) STORE.put("coll", id, Object.keys(x).length ? { n, x } : { n }); else STORE.del("coll", id);
+  ASIDE.trim(id);
   return n;
 }
 
@@ -78,6 +82,144 @@ const COLL = {
     }
   },
 };
+
+// ---------- playsets and spares ----------
+// The box holds a playset of each printing, the best copies first; the rest are spares. Records: ("keep", card id)
+// {all}: every copy stays or not, where that's not the rule's own answer; ("keep", "foil-first") {on}; ("aside",
+// printing id) {ver: n}: the copies put aside.
+const KEEP = {
+  // as many as a deck may have of it; settings' playset says how many that is
+  always: (card) => card.supertype === "Token" || /your deck can have any number of cards named/i.test(card.text || ""),
+  all: (card) => STORE.get("keep", card.id)?.all ?? KEEP.always(card),
+  setAll(card, on) { if (on === KEEP.always(card)) STORE.del("keep", card.id); else STORE.put("keep", card.id, { all: on }); },
+  size: (card) => S.playset?.[card.type] ?? S.playset?.other ?? 3,
+  limit: (card) => (KEEP.all(card) ? Infinity : KEEP.size(card)),
+  foilFirst: () => STORE.get("keep", "foil-first")?.on ?? S.keepFoilFirst ?? false,
+  setFoilFirst: (on) => STORE.put("keep", "foil-first", { on }),
+  // the versions, the one to keep first in front
+  order() {
+    const langs = [...new Set([...(S.languages || []), ...Object.keys(LANGS)])].filter((l) => l in LANGS), foil = KEEP.foilFirst();
+    return langs.flatMap((l) => [verOf(l, foil), verOf(l, !foil)]);
+  },
+};
+const noVers = () => Object.fromEntries(Object.keys(VERSIONS).map((k) => [k, 0]));
+// of these copies, the ones that stay
+function keepOf(have, limit) {
+  const out = noVers();
+  for (const v of KEEP.order()) { out[v] = Math.min(have[v] || 0, limit); limit -= out[v]; }
+  return out;
+}
+const ASIDE = {
+  v: (id, ver = "") => Math.min(STORE.get("aside", id)?.[ver] || 0, COLL.v(id, ver)),
+  add(id, ver, d) {
+    if (!d) return;
+    const c = {};
+    for (const k of Object.keys(VERSIONS)) { const n = Math.min(COLL.v(id, k), Math.max(0, ASIDE.v(id, k) + (k === (ver || "") ? d : 0))); if (n) c[k] = n; }
+    if (Object.keys(c).length) STORE.put("aside", id, c); else STORE.del("aside", id);
+  },
+  // never more than there are, so copies that are gone don't come back as spares
+  trim(id) {
+    const r = STORE.get("aside", id);
+    if (!r || Object.entries(r).every(([k, n]) => n <= COLL.v(id, k))) return;
+    const c = Object.fromEntries(Object.keys(r).map((k) => [k, ASIDE.v(id, k)]).filter(([, n]) => n));
+    if (Object.keys(c).length) STORE.put("aside", id, c); else STORE.del("aside", id);
+  },
+};
+// what's in the box: not aside, and not among the items still to be filed (those already in the counts)
+function inBox(id, items) {
+  const c = noVers();
+  for (const k of Object.keys(c)) c[k] = COLL.v(id, k) - ASIDE.v(id, k);
+  for (const i of items) if (i.id === id && !i.isNew) c[i.ver || ""] -= i.n;
+  for (const k of Object.keys(c)) c[k] = Math.max(0, c[k]);
+  return c;
+}
+// items: [{id, n, ver, isNew}], isNew: not in the collection's counts yet (a scan's tally)
+// -> for each {box, aside, out}: copies for the box, for the spares, and {ver: n} to take out of the box for better ones
+function sortOut(items) {
+  const res = items.map((i) => ({ box: 0, aside: 0, out: {} }));
+  const by = new Map();
+  items.forEach((i, at) => { if (!by.has(i.id)) by.set(i.id, []); by.get(i.id).push(at); });
+  for (const [id, ats] of by) {
+    const hit = PRINTS.get(id.toUpperCase());
+    if (!hit) continue;
+    const box = inBox(id, items), have = { ...box };
+    for (const at of ats) have[items[at].ver || ""] += items[at].n;
+    const keep = keepOf(have, KEEP.limit(hit.card)), room = {}, out = {};
+    for (const k of Object.keys(have)) { const stay = Math.min(box[k], keep[k]); room[k] = keep[k] - stay; if (box[k] > stay) out[k] = box[k] - stay; }
+    for (const at of ats) { const v = items[at].ver || ""; res[at].box = Math.min(items[at].n, room[v]); res[at].aside = items[at].n - res[at].box; room[v] -= res[at].box; }
+    // taken out when the first of its better ones goes in
+    if (Object.keys(out).length) res[ats.find((at) => res[at].box) ?? ats[0]].out = out;
+  }
+  return res;
+}
+// the printings in the box
+const boxedIds = (items = []) => STORE.all("coll").map((r) => r.id).filter((id) => Object.values(inBox(id, items)).some((n) => n));
+// Over the whole collection but the items still to be filed: what is beyond a playset in the box, what of the spares
+// belongs in it, and the spares. -> {out, back, aside}, each [{id, n, ver, card, p}] in filing order
+function spares(items = []) {
+  const r = { out: [], back: [], aside: [] };
+  for (const { id } of STORE.all("coll")) {
+    const hit = PRINTS.get(id.toUpperCase());
+    if (!hit) continue;
+    const box = inBox(id, items), all = noVers();
+    for (const k of Object.keys(all)) all[k] = box[k] + ASIDE.v(id, k);
+    const keep = keepOf(all, KEEP.limit(hit.card));
+    for (const ver of Object.keys(all)) {
+      const row = (n) => ({ id: hit.p.id, n, ver, ...hit });
+      if (box[ver] > keep[ver]) r.out.push(row(box[ver] - keep[ver]));
+      if (keep[ver] > box[ver]) r.back.push(row(keep[ver] - box[ver]));
+      if (ASIDE.v(id, ver)) r.aside.push(row(ASIDE.v(id, ver)));
+    }
+  }
+  for (const k of Object.keys(r)) r[k] = r[k].map((x) => ({ x, key: [fileKey({ ...x.card, p: x.p }), x.ver] })).sort((a, b) => cmp(a.key, b.key)).map(({ x }) => x);
+  return r;
+}
+
+// The batch being filed: {items: [{id, n, ver}], done: [{k, id, n, ver, aside, out}]}, done: ticked, newest first; aside:
+// those went to the spares; out: taken out of the box with them. Changes the batch it's given.
+const FILING = {
+  read(f) {
+    if (!f?.items) return { items: [], done: [] };
+    // kept as indexes of items before spares were
+    if (f.done.some((x) => typeof x === "number")) return { items: f.items.filter((_, i) => !f.done.includes(i)), done: f.items.filter((_, i) => f.done.includes(i)).map((i) => ({ ...i, k: STORE.uid(), out: {} })) };
+    return f;
+  },
+  put(f, i) {
+    const same = f.items.find((x) => x.id === i.id && (x.ver || "") === (i.ver || ""));
+    if (same) same.n += i.n; else f.items.push({ id: i.id, n: i.n, ver: i.ver || "" });
+  },
+  // an item's part that goes into the box or aside
+  tick(f, item, aside) {
+    const r = sortOut(f.items)[f.items.indexOf(item)];
+    const n = r && (aside ? r.aside : r.box);
+    if (!n) return null;
+    const out = !aside || !r.box ? r.out : {};
+    item.n -= n;
+    if (!item.n) f.items.splice(f.items.indexOf(item), 1);
+    if (aside) ASIDE.add(item.id, item.ver, n);
+    for (const [v, c] of Object.entries(out)) ASIDE.add(item.id, v, c);
+    const d = { k: STORE.uid(), id: item.id, n, ver: item.ver || "", aside: !!aside, out };
+    f.done.unshift(d);
+    return d;
+  },
+  untick(f, d) {
+    f.done.splice(f.done.indexOf(d), 1);
+    if (d.aside) ASIDE.add(d.id, d.ver, -d.n);
+    for (const [v, c] of Object.entries(d.out || {})) ASIDE.add(d.id, v, -c);
+    FILING.put(f, d);
+  },
+  // n copies of a printing's version turn out to be these instead: {ver: n}, maybe of another printing
+  edit(f, { id, n, ver }, to, counts) {
+    const item = f.items.find((x) => x.id === id && (x.ver || "") === (ver || ""));
+    if (!item) return;
+    item.n -= n;
+    if (item.n <= 0) f.items.splice(f.items.indexOf(item), 1);
+    COLL.add(id, -n, ver);
+    for (const [v, c] of Object.entries(counts)) if (c > 0) { COLL.add(to, c, v); FILING.put(f, { id: to, n: c, ver: v }); }
+  },
+};
+
+// ---------- filing ----------
 
 // Where a batch of printings goes in the box. items: [{id, n, ver}], boxed: the printings already in it.
 // -> [{id, n, ver, card, p, pile, after, before, already}] in filing order; after: the card just in front, maybe one of

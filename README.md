@@ -90,7 +90,8 @@ the CSV export has an `own` column. Each printing is counted per language (Engli
   The language (English, Chinese, French, Korean) is told by comparing the text with the English picture and,
   if it isn't English, reading its script in the background; blurred or unsure, your choice counts and the line says so. Foil is yours to say (✦). After each card the pile it goes on is shown (domain, rarity). Every
   scanned card is a line of its own. **Check** turns the camera off and shows the list over the whole screen: what needs a look, or all
-  in the order they are filed, each with the cards it goes between; a tap on a card's picture shows your scan beside it. After **Add all**, **File** keeps that list to tick off.
+  in the order they are filed, each with the cards it goes between; a tap on a card's picture shows your scan beside it. After **Add all**, **File** keeps that list to tick off:
+  what is filed moves to the end, holding a card (or a right click) corrects its printing, versions and count.
   The order: `fileOrder` in `web/settings.js`, then the legends each followed by its signatures, then the battlefields (`sort:file`). Each card beeps into a list
   you check before **Add all**. A card counts again after the frame was empty. Light, a photo, and typing the number are there too.
   Text recognition is [Tesseract.js](https://github.com/naptha/tesseract.js), loaded the first time it's needed and kept offline.
@@ -99,6 +100,12 @@ the CSV export has an `own` column. Each printing is counted per language (Engli
 - **Quick entry**: `ogn 42`, `OGN-042a x2`, `3x sfd 7`, `sfd r01 -1`, then a number alone for the same set; `zh`, `fr`, `ko` and `foil` at the end for those.
 - **Paste a list**: quick entries, printing ids, `3 Name` lines, a CSV with an `id` and an `own`/`count` column (this page's
   export), or a deck code; add to what you have or replace the counts, with a preview and undo.
+
+**Spares**: the box holds a playset of each printing (`playset` in `web/settings.js`: 3, legends and battlefields 1, runes 12), the best
+copies first: English, English foil, Chinese, Chinese foil, or the foils of a language first, switched on the Spares list. Scanning says
+**Spare** for a card beyond that, **File** lists those to put aside and what better copies push out of the box, and
+**Spares** what is aside, what still has to come out, and copies it all as a list. Spares still count as yours; take off what's sold there.
+**Keep every copy**, in a card's dialog or when changing an entry, turns it off for a card; tokens and Spiderling have it on.
 
 Where a printing is only made as foil, or never, it's counted as that by itself (`foil` from Piltover's data); ✦ still overrides it,
 and the Collection page offers to correct copies counted before.

@@ -644,7 +644,8 @@ const placeText = (f) => f.already ? `with your other ${esc(f.card.name)}` : [f.
 // the pile a card goes on: legends with their signatures, battlefields, else domain and rarity
 const pileOf = (card, p) => filePile(card) ? `<b>${FILE_PILES[filePile(card)]}</b>${filePile(card) === 1 ? ` · ${esc(card.champion)}` : ""}` : `${card.domains.map((d) => `<img class="ic" src="icons/${d.toLowerCase()}.webp" alt="">`).join("")}<b>${card.domains.map((d) => cap(d.toLowerCase())).join(" + ") || "Colorless"}</b> · ${p.rarity}`;
 
-function initScan(onAdd) {
+// pending(): the items added before that are still to be filed
+function initScan(onAdd, pending = () => []) {
   const dlg = document.getElementById("scan");
   if (!dlg) return;
   const $s = (q) => dlg.querySelector(q);
@@ -683,7 +684,8 @@ function initScan(onAdd) {
     const place = new Map();
     if (checking && view === "order") {
       // the order the cards are filed in (fileOrder), and where each goes
-      const f = filing(tally, STORE.all("coll").filter((r) => r.data.n > 0).map((r) => r.id));
+      const s = sorted(), boxed = boxedIds(pending());
+      const f = [...filing(tally.filter((_, i) => s[i].box), boxed), ...filing(tally.filter((_, i) => !s[i].box), []).map((x) => ({ ...x, spare: true }))];
       f.forEach((x, i) => place.set(x.k, { ...x, i }));
       rows.sort(([a, i], [b, j]) => (place.get(a.k)?.i ?? 0) - (place.get(b.k)?.i ?? 0) || i - j);
     }
@@ -695,12 +697,12 @@ function initScan(onAdd) {
       if (!hit) return "";
       const { card, p } = hit;
       const opts = card.printings.length > 1 ? `<select class="printing" aria-label="Printing">${card.printings.map((x) => `<option value="${esc(x.id)}"${x.id === p.id ? " selected" : ""}>${esc(x.id)}${x.kind ? ` · ${esc(x.kind)}` : ""}</option>`).join("")}</select>` : `<small>${esc(p.id)}</small>`;
-      const pl = place.size ? pileOf(card, p) : "", head = pl !== lastPile && pl ? `<li class="pile-head">${pl}</li>` : "";
+      const spare = place.get(t.k)?.spare, pl = !place.size ? "" : spare ? "<b>Spares</b>" : pileOf(card, p), head = pl !== lastPile && pl ? `<li class="pile-head">${pl}</li>` : "";
       lastPile = pl;
       const langs = [...new Set([...myLangs(), langOf(t.ver)])];
       const warn = [t.sure ? "" : "check the printing", t.guess ? "check the language" : "", t.again ? "the same card again, or counted twice?" : ""].filter(Boolean);
       return `${head}<li data-k="${esc(t.k)}" class="${warn.length ? "unsure" : ""}"><button type="button" class="look" aria-label="Compare with the scan">${p.img ? `<img src="${esc(p.img)}" alt="">` : "?"}</button>
-        <span class="nm"><b>${esc(card.name)}</b><span class="sel">${opts}</span>${place.has(t.k) ? `<small class="place">${placeText(place.get(t.k))}</small>` : ""}${warn.map((w) => `<small class="warn">${w}</small>`).join("")}</span>
+        <span class="nm"><b>${esc(card.name)}</b><span class="sel">${opts}</span>${place.has(t.k) && !spare ? `<small class="place">${placeText(place.get(t.k))}</small>` : ""}${warn.map((w) => `<small class="warn">${w}</small>`).join("")}</span>
         <span class="vers-btns">${langs.map((l) => `<button type="button" data-lang="${l}" aria-pressed="${langOf(t.ver) === l}" aria-label="${LANGS[l][0]}">${LANGS[l][1]}</button>`).join("")}<button type="button" data-foil aria-pressed="${isFoil(t.ver)}" aria-label="Foil"${p.foil ? ` class="fixed" title="${p.foil === "only" ? "only made as foil" : "not made as foil"}"` : ""}>✦</button></span>
         ${warn.length ? `<button type="button" class="icon-btn ok" aria-label="It's right" title="It's right">✓</button>` : ""}<button type="button" class="icon-btn drop" aria-label="Take it off the list" title="Take it off the list">✕</button></li>`;
     }).join("") + (hidden ? `<li class="rest"><button type="button" class="btn text">and ${hidden} more: Check</button></li>` : "")
@@ -725,10 +727,20 @@ function initScan(onAdd) {
     }
     const same = tally.filter((x) => x.id === m.id).length;
     hint.textContent = `+1 ${m.card.name}${same > 1 ? ` (${same})` : ""} · ${VERSIONS[ver]}${t.guess ? "?" : ""}`;
-    pile.innerHTML = pileOf(m.card, m.p || PRINTS.get(m.id.toUpperCase()).p);
-    pile.hidden = false;
+    showPile();
     $s(".undo-last").hidden = false;
     return t;
+  }
+  // which of the scanned cards go into the box, given what's there and still to be filed: [{box, aside}] like tally
+  function sorted() {
+    const before = pending();
+    return sortOut([...before, ...tally.map((t) => ({ ...t, isNew: true }))]).slice(before.length);
+  }
+  function showPile() {
+    const t = tally.at(-1), hit = t && PRINTS.get(t.id.toUpperCase());
+    pile.hidden = !hit;
+    if (hit) pile.innerHTML = sorted().at(-1).box ? pileOf(hit.card, hit.p) : "<b>Spare</b>";
+    pile.classList.toggle("spare", !!hit && pile.textContent === "Spare");
   }
   function drop(t) {
     fixed(t, t.again ? "twice" : "removed", null);
@@ -813,6 +825,7 @@ function initScan(onAdd) {
     const x = shots.get(t.k);
     if (x && !x.done) { x.frame = snapshot(c); x.think = s.m.think; }
     if (!checking) hint.textContent = `${s.m.card.name} · ${VERSIONS[t.ver]}`;
+    if (t === tally.at(-1)) showPile();
     save(); show();
   }
   let reading = false;

@@ -14,6 +14,13 @@ window.SETTINGS = {
   // Your cards' languages, offered in the card dialog (en, zh, fr, ko). Others show once you have some.
   languages: ["en", "zh"],
 
+  // How many copies of a printing stay in the box, by type; the rest are spares (Collection). A card that should keep
+  // every copy says so in its dialog; tokens and cards a deck may have any number of do by themselves.
+  playset: { Legend: 1, Battlefield: 1, Rune: 12, other: 3 },
+
+  // Which copies those are: languages in the order above, in each the non-foils first. Switched on the Spares list.
+  keepFoilFirst: false,
+
   // The site whose rulings are shown with a card, loaded from it when the card is opened: {id} is a printing's id as in
   // their addresses (SFD-202 is SFD202). api "": only the links, nothing is loaded. list: for cards without such a
   // number (tokens); "" for nothing at all.

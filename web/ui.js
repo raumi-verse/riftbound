@@ -6,6 +6,7 @@
 //   stepper(name, value, {min, max, label})           a number with − and +; a named input inside forms
 //   tagInput(name, values, known)                     chips to tick and a field to add one; form[name].value is "a, b"
 //   fillChips(name, values)                           earlier values that fill the form's input [name]
+//   onHold(root, selector, (el) => …)                  a long press (or right click, or the menu key) on one of those
 //   seg(legend, name, [[value, label]], current)      one of a few
 
 const $ = (s, root = document) => root.querySelector(s);
@@ -52,6 +53,30 @@ function toast(text, { undo } = {}) {
   ([...document.querySelectorAll("dialog[open]")].at(-1) || document.body).append(t);
   if (undo) $("button", t).onclick = () => { t.remove(); undo(); };
   toastTimer = setTimeout(() => t.remove(), undo ? 6000 : 3000);
+}
+
+function onHold(root, selector, fn) {
+  let timer, from = null, held = false;
+  const stop = () => { clearTimeout(timer); from = null; };
+  const hold = (el) => { stop(); held = true; fn(el); };
+  root.addEventListener("pointerdown", (e) => {
+    stop();
+    held = false;
+    const el = e.button === 0 && e.target.closest(selector);
+    if (!el) return;
+    from = [e.clientX, e.clientY];
+    timer = setTimeout(() => { navigator.vibrate?.(25); hold(el); }, 450);
+  });
+  root.addEventListener("pointermove", (e) => { if (from && Math.hypot(e.clientX - from[0], e.clientY - from[1]) > 10) stop(); });
+  for (const t of ["pointerup", "pointercancel", "pointerleave"]) root.addEventListener(t, stop);
+  root.addEventListener("contextmenu", (e) => {
+    const el = e.target.closest(selector);
+    if (!el) return;
+    e.preventDefault();
+    if (!held) hold(el); // a phone sends this during the press too
+  });
+  // letting go isn't a tap
+  root.addEventListener("click", (e) => { if (held && e.detail) { held = false; if (e.target.closest(selector)) { e.preventDefault(); e.stopImmediatePropagation(); } } }, true);
 }
 
 const stepper = (name, value, { min = 0, max = 99, label = name } = {}) =>

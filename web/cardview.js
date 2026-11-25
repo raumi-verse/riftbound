@@ -34,6 +34,8 @@ function gridSection(rows, binder = false) {
   }).join("")}</div>`;
 }
 
+// whether copies beyond a playset are spares
+const keepCheck = (card) => `<label class="chip-check keep"><input type="checkbox" name="keep" data-keep="${esc(card.id)}"${KEEP.all(card) ? " checked" : ""}><span>Keep every copy</span></label>`;
 const ROLE_SHORT = ["Legend", "Champion", "Signature"];
 function showCard(r, pos) {
   const d = $("#detail");
@@ -57,6 +59,7 @@ function showCard(r, pos) {
     <div class="rulings" data-site="${esc(r.id)}"></div>
     ${sameChampion(r)}
     <h3>Printings <small>your copies</small></h3>
+    ${keepCheck(r)}
     <div class="prints">${r.printings.map((p) => `<div class="prw"><button class="pr" data-id="${esc(p.id + p.kind)}">${ICONS.rarity(p.rarity)} ${esc(p.set)} ${p.num ?? ""} · ${esc(p.rarity)}${p.kind ? ` · ${esc(p.kind)}` : ""}${p.artist ? `<small>${esc(p.artist)}</small>` : ""}</button>${versionRows(p.id)}</div>`).join("")}</div>`;
   d.querySelectorAll(".pr").forEach((b, i) => (b.onclick = () => show(r.printings[i])));
   d.querySelectorAll(".same button").forEach((b) => (b.onclick = () => showCard(FOLDED.find((c) => c.id === b.dataset.id), "")));
@@ -83,6 +86,11 @@ function sameChampion(r) {
 $("#detail").addEventListener("click", (e) => { if (e.target.id === "detail") e.target.close(); });
 $("#detail").addEventListener("keydown", (e) => {
   if (e.key === "ArrowLeft" || e.key === "ArrowRight") { e.preventDefault(); onStep(e.key === "ArrowLeft" ? -1 : 1); }
+});
+
+$("#detail").addEventListener("change", (e) => {
+  const id = e.target.dataset?.keep;
+  if (id) KEEP.setAll(CARDS.find((c) => c.id === id), e.target.checked);
 });
 
 // − / + anywhere, and the counts follow the store (this tab, another tab, another device)
