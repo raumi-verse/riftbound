@@ -3,6 +3,10 @@
 // navigation, and the service worker. Needs query.js, store.js and ui.js first.
 
 (() => {
+  // rb.raumi.dev/decks instead of /decks.html, where the server knows both (settings' cleanAddresses)
+  if ((window.SETTINGS?.cleanAddresses || []).includes(location.host) && /\.html$/.test(location.pathname)) {
+    history.replaceState(history.state, "", location.pathname.replace(/(index)?\.html$/, "") + location.search + location.hash);
+  }
   if (document.body.dataset.page !== "play") {
     const bar = document.createElement("a");
     bar.id = "now";

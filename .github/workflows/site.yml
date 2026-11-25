@@ -47,12 +47,13 @@ jobs:
           node --test test/*.test.mjs
           python3 -m unittest discover test
 
-      # rb.raumi.dev/search/ is the browser; the root only forwards there (room for other pages later)
+      # the pages at the root; /search/, where they were, leads there (old links, the app installed from there)
       - name: Lay out the site
         run: |
-          mkdir -p _site
-          cp -r web _site/search
-          printf '<!DOCTYPE html><meta charset="utf-8"><title>Riftbound</title><meta http-equiv="refresh" content="0; url=search/"><a href="search/">Riftbound card search</a>\n' > _site/index.html
+          cp -r web _site
+          mkdir -p _site/search
+          for p in index decks collection play goldfish login; do cp moved/page.html _site/search/$p.html; done
+          cp moved/sw.js _site/search/sw.js
 
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3

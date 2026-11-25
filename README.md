@@ -11,7 +11,7 @@ python3 sync.py --images   # also keep the card pictures in web/img/ for offline
 xdg-open web/index.html    # the page; nothing runs in the background
 ```
 
-Hosted at https://rb.raumi.dev/search/; a GitHub Action syncs the cards every Monday (or on "Run workflow").
+Hosted at https://rb.raumi.dev (until November 2026 under /search/, which leads there); a GitHub Action syncs the cards every Monday (or on "Run workflow").
 Once opened there it also works offline (cards, icons and the pictures you've seen) and can be installed as an
 app on a phone.
 Card data and pictures come from the unofficial [Piltover Archive](https://piltoverarchive.com) API (Riftcodex lacked
@@ -56,7 +56,7 @@ this list (`id=OGN-275|SFD-207 …`), or downloads them as a CSV. A card's champ
 
 ## Goldfish
 
-`goldfish.html` (**Goldfish** on the Decks page or a deck, rb.raumi.dev/search/goldfish.html): paste a deck (a Piltover deck
+`goldfish.html` (**Goldfish** on the Decks page or a deck, rb.raumi.dev/goldfish): paste a deck (a Piltover deck
 code, or `2 Name` lines with or without `Legend:` `Champion:` `MainDeck:` `Battlefields:` `Runes:` headers) and it plays
 the deck alone 20 000 times, no opponent and **no card text**. It shows per turn:
 
@@ -165,6 +165,7 @@ folding, hiding tokens/runes, domain order, the sync server, the points to win, 
 - `web/decks.html`, `web/decks.js`, `web/play.html`, `web/play.js`: the Decks and Play pages
 - `web/app.js`: the search page: rendering, filter bar
 - `web/sw.js`, `web/manifest.webmanifest`: offline use and installing as an app
+- `moved/`: what the old address /search/ serves
 - `test/`: the page's code on the real cards, `node --test test/*.test.mjs`, and the server, `python3 -m unittest discover test`
   (both run before every deploy)
 - `web/index.html`, `web/style.css` (Catppuccin Mocha)

@@ -2,7 +2,7 @@
 // The page itself network-first, so the weekly cards.js is never stale while online; icons and card pictures
 // from the cache once seen. The page is never served from an old cache when the network works, so the
 // cache names only change if this file's layout of them does.
-const SHELL = "shell-v2", ICONS = "icons-v1", IMAGES = "images-v1", LIBS = "libs-v1"; // libs: the scan's OCR (jsdelivr)
+const SHELL = "shell-v3", ICONS = "icons-v1", IMAGES = "images-v1", LIBS = "libs-v1"; // libs: the scan's OCR (jsdelivr)
 const KEEP_IMAGES = 1500; // card pictures, ~100 KB each (about every printing, ~150 MB); oldest dropped first
 const SHELL_FILES = ["./", "index.html", "style.css", "settings.js", "cards.js", "query.js", "app.js", "manifest.webmanifest",
   "goldfish.html", "deck.js", "sim.js", "goldfish.js", "store.js", "sync.js", "account.js", "collection.js", "scan.js",
@@ -37,7 +37,7 @@ async function networkFirst(req) {
     if (res.ok) cache.put(req, res.clone());
     return res;
   } catch (err) {
-    const hit = await cache.match(req, { ignoreSearch: true }) || (req.mode === "navigate" && await cache.match("./"));
+    const hit = await cache.match(req, { ignoreSearch: true }) || (req.mode === "navigate" && (await cache.match(req.url.split(/[?#]/)[0] + ".html") || await cache.match("./")));
     if (hit) return hit;
     throw err;
   }
