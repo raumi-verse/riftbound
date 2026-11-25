@@ -340,6 +340,12 @@ button.errata-b { cursor: pointer; min-height: 24px; }
 .ruling-list p { margin: 0 4rem .2rem 0; overflow-wrap: anywhere; }
 .ruling-list .btn { position: absolute; right: .3rem; top: .2rem; }
 .rulings .row { gap: .4rem 1rem; }
+.site-list p { margin: 0; }
+.site-list .site-text { margin: .4rem 0; overflow-wrap: anywhere; }
+.site-list .row { justify-content: space-between; }
+.site-list .btn { position: static; }
+.site-list .outdated { opacity: .6; }
+.card-link { border: 0; padding: 0; background: none; color: var(--accent); cursor: pointer; text-align: left; }
 .rule-card { display: grid; grid-template-columns: minmax(90px, 30%) 1fr; gap: 1rem; align-items: start; }
 .rule-card > img { width: 100%; border-radius: 8px; }
 .found h3 { margin: 1rem 0 .2rem; font-size: 14px; color: var(--overlay); }

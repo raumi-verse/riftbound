@@ -54,6 +54,7 @@ function showCard(r, pos) {
     <p class="tags">${r.champion ? `Champion: ${qlink(`champ="${r.champion}" group:champion`, r.champion)} · ` : ""}${r.tags.filter((t) => t !== r.champion).map((t) => qlink(`tag="${t}"`, t)).join(", ")}</p>
     ${r.type === "Legend" ? `<p class="tags">${qlink(`for:"${r.name}" group:type`, "Everything this legend's deck may play")}</p>` : ""}
     <div class="rulings" data-rulings="${esc(r.id)}">${rulingsHtml(r)}</div>
+    <div class="rulings" data-site="${esc(r.id)}"></div>
     ${sameChampion(r)}
     <h3>Printings <small>your copies</small></h3>
     <div class="prints">${r.printings.map((p) => `<div class="prw"><button class="pr" data-id="${esc(p.id + p.kind)}">${ICONS.rarity(p.rarity)} ${esc(p.set)} ${p.num ?? ""} · ${esc(p.rarity)}${p.kind ? ` · ${esc(p.kind)}` : ""}${p.artist ? `<small>${esc(p.artist)}</small>` : ""}</button>${versionRows(p.id)}</div>`).join("")}</div>`;
@@ -65,6 +66,7 @@ function showCard(r, pos) {
   d.querySelector(".big").classList.toggle("land", !!r.landscape);
   show(r.p);
   if (!d.open) d.showModal();
+  loadSite(d);
 }
 // the champion's legend, units and signatures as small pictures
 function sameChampion(r) {
