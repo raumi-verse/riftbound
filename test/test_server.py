@@ -231,7 +231,7 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
         return None
 
 
-ISSUER, BACK = "https://id.example", "https://rb.raumi.dev/search/login.html"
+ISSUER, BACK = "https://id.example", "https://rb.raumi.dev/login.html"
 
 
 class Passkeys(Server):
@@ -324,10 +324,10 @@ class Passkeys(Server):
         self.assertIn("error", self.callback({"code": "x", "state": q["state"], "iss": "https://evil.example"})[1])
 
     def test_return_pages(self):
-        for ok in (BACK, "https://rb.raumi.dev/login.html", "http://localhost:8000/login.html"):
+        for ok in (BACK, "https://rb.raumi.dev/a/login.html", "http://localhost:8000/login.html"):
             self.assertEqual(self.start(**{"return": ok})[0], 200, ok)
         for bad in ("https://evil.example/login.html", "https://rb.raumi.dev@evil.example/login.html", "https://rb.raumi.dev.evil.example/login.html",
-                    "https://rb.raumi.dev/search/decks.html", BACK + "#x", BACK + "?x", "null", "javascript:alert(1)//login.html", None, 3,
+                    "https://rb.raumi.dev/decks.html", BACK + "#x", BACK + "?x", "null", "javascript:alert(1)//login.html", None, 3,
                     "https://rb.raumi.dev\\@evil.example/login.html", BACK + "\n"):
             self.assertEqual(self.start(**{"return": bad})[0], 400, bad)
         self.assertEqual(self.call("POST", "/oidc/start", {"challenge": "short", "return": BACK})[0], 400)

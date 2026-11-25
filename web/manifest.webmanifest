@@ -2,7 +2,6 @@
   "name": "Riftbound card search",
   "short_name": "Riftbound",
   "description": "Every Riftbound card, searchable, offline once opened.",
-  "id": "/search/",
   "start_url": ".",
   "scope": ".",
   "display": "standalone",
