@@ -107,8 +107,8 @@ and the Collection page offers to correct copies counted before.
 
 A card whose text was changed has an **errata** badge (`is:errata`) and shows where the change is from; the text shown is the current
 one. **Note a ruling** in the card's dialog keeps how something was ruled, with its source; notes sync like decks (`is:ruling`). A deck's
-list marks both, and **Rulings** on a deck, or § while playing, lists them for its cards and finds any other. Official rulings are only
-linked (`rulingsSite` in `web/settings.js`), as they are replaced too often to copy.
+list marks both, and **Rulings** on a deck, or § while playing, lists them for its cards and finds any other. Others' rulings are only
+linked ([Joutes](https://www.joutes.app), `rulingsSite` in `web/settings.js`), as they are replaced too often to copy.
 
 ## Decks and games
 

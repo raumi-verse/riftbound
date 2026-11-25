@@ -53,8 +53,9 @@ test("notes: per card, newest first, harmless to show", () => {
   assert.doesNotMatch(h, /<img|href="javascript/);
   assert.match(h, /&lt;img/); assert.match(h, /example\.org/);
   assert.equal(G("run")("is:ruling").count, 1);
-  assert.match(h, /runeweave\.com\/card\/sky-splitter"/);
-  assert.match(G("rulingsHtml")(CARDS.find((x) => x.name.startsWith("Kai'Sa, Daughter"))), /card\/daughter-of-the-void"/);
+  assert.match(h, /joutes\.app\/en\/games\/riftbound\/cards\/OGN014"/);
+  assert.match(G("rulingsHtml")(CARDS.find((x) => x.name.startsWith("Kai'Sa, Daughter"))), /cards\/OGN247"/);
+  for (const x of CARDS) assert.doesNotMatch(G("officialLink")(x), /cards\/[A-Z]{3}(R|SP|T)\d|\*/, x.name);
   STORE.del("ruling", "a"); STORE.del("ruling", "b");
   assert.equal(G("run")("is:ruling").count, 0);
 });

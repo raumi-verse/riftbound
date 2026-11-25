@@ -15,10 +15,10 @@ const safeUrl = (u) => { try { const x = new URL(u); return /^https?:$/.test(x.p
 function officialLink(c) {
   const site = S.rulingsSite;
   if (!site?.list) return "";
-  const slug = (n) => n.normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/['’]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-  const sure = site.card && !["Signature", "Token", "Basic"].includes(c.supertype) && c.type !== "Rune";
-  const url = sure ? site.card.replace("{name}", slug(c.type === "Legend" ? c.name.replace(/^.*?,\s*/, "") : c.name)) : site.list;
-  return `<a href="${esc(url)}" target="_blank" rel="noopener">${sure ? "" : "All "}${sure ? "Rulings" : "rulings"} on ${esc(site.name)} ↗</a>`;
+  // the first printing with a plain number, alt arts included (R01, SP1 and signed ones have no page there)
+  const p = site.card && c.supertype !== "Token" && c.printings.find((x) => /^[A-Z]{3}-\d{3}[ab]?$/.test(x.id));
+  const url = p ? site.card.replace("{id}", p.id.replace("-", "")) : site.list;
+  return `<a href="${esc(url)}" target="_blank" rel="noopener">${p ? "Rulings" : "Find it"} on ${esc(site.name)} ↗</a>`;
 }
 const errataLine = (c) => (c.errata ? `<p class="errata-line"><span class="errata-b">errata</span> ${esc(c.errata)}. This is the current text; the printed card may say something else.</p>` : "");
 

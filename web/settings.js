@@ -14,9 +14,9 @@ window.SETTINGS = {
   // Your cards' languages, offered in the card dialog (en, zh, fr, ko). Others show once you have some.
   languages: ["en", "zh"],
 
-  // Where a card's dialog links to for official rulings: {name} is the card's name as in their addresses; list is the
-  // page for cards whose address isn't certain (signatures, tokens). "" for no link.
-  rulingsSite: { name: "Runeweave", card: "https://runeweave.com/card/{name}", list: "https://runeweave.com/rulings" },
+  // Where a card's dialog links to for rulings: {id} is a printing's id as in their addresses (SFD-202 is SFD202); list
+  // is the page for cards without such a number (some runes, tokens). "" for no link.
+  rulingsSite: { name: "Joutes", card: "https://www.joutes.app/en/games/riftbound/cards/{id}", list: "https://www.joutes.app/en/games/riftbound/cards" },
 
   // Scanning: show what the text recognition read in each frame (for tuning).
   scanDebug: false,
