@@ -175,8 +175,9 @@ function spares(items = []) {
   return r;
 }
 
-// The batch being filed: {items: [{id, n, ver}], done: [{k, id, n, ver, aside, out}]}, done: ticked, newest first; aside:
-// those went to the spares; out: taken out of the box with them. Changes the batch it's given.
+// The batch being filed: {items: [{id, n, ver, guess}], done: [{k, id, n, ver, guess, aside, out}]}, done: ticked, newest
+// first; aside: those went to the spares; out: taken out of the box with them; guess: put on the list again without
+// knowing how many (timeline.js). Changes the batch it's given.
 const FILING = {
   read(f) {
     if (!f?.items) return { items: [], done: [] };
@@ -185,8 +186,8 @@ const FILING = {
     return f;
   },
   put(f, i) {
-    const same = f.items.find((x) => x.id === i.id && (x.ver || "") === (i.ver || ""));
-    if (same) same.n += i.n; else f.items.push({ id: i.id, n: i.n, ver: i.ver || "" });
+    const same = f.items.find((x) => x.id === i.id && (x.ver || "") === (i.ver || "") && !x.guess === !i.guess);
+    if (same) same.n += i.n; else f.items.push({ id: i.id, n: i.n, ver: i.ver || "", ...(i.guess ? { guess: true } : {}) });
   },
   // an item's part that goes into the box or aside
   tick(f, item, aside) {
@@ -198,7 +199,7 @@ const FILING = {
     if (!item.n) f.items.splice(f.items.indexOf(item), 1);
     if (aside) ASIDE.add(item.id, item.ver, n);
     for (const [v, c] of Object.entries(out)) ASIDE.add(item.id, v, c);
-    const d = { k: STORE.uid(), id: item.id, n, ver: item.ver || "", aside: !!aside, out };
+    const d = { k: STORE.uid(), id: item.id, n, ver: item.ver || "", ...(item.guess ? { guess: true } : {}), aside: !!aside, out };
     f.done.unshift(d);
     return d;
   },
@@ -208,14 +209,15 @@ const FILING = {
     for (const [v, c] of Object.entries(d.out || {})) ASIDE.add(d.id, v, -c);
     FILING.put(f, d);
   },
-  // n copies of a printing's version turn out to be these instead: {ver: n}, maybe of another printing
-  edit(f, { id, n, ver }, to, counts) {
-    const item = f.items.find((x) => x.id === id && (x.ver || "") === (ver || ""));
+  // n copies of a printing's version turn out to be these instead: {ver: n}, maybe of another printing. Of a guess only
+  // what's on the list changes, not the collection.
+  edit(f, { id, n, ver, guess }, to, counts) {
+    const item = f.items.find((x) => x.id === id && (x.ver || "") === (ver || "") && !x.guess === !guess);
     if (!item) return;
     item.n -= n;
     if (item.n <= 0) f.items.splice(f.items.indexOf(item), 1);
-    COLL.add(id, -n, ver);
-    for (const [v, c] of Object.entries(counts)) if (c > 0) { COLL.add(to, c, v); FILING.put(f, { id: to, n: c, ver: v }); }
+    if (!guess) COLL.add(id, -n, ver);
+    for (const [v, c] of Object.entries(counts)) if (c > 0) { if (!guess) COLL.add(to, c, v); FILING.put(f, { id: to, n: c, ver: v, guess }); }
   },
 };
 

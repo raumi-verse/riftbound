@@ -399,7 +399,15 @@ body[data-page=collection] #account { margin-left: 0; }
 .file-list .list-row img { pointer-events: none; }
 .file-list .pile-head { display: flex; flex-wrap: wrap; align-items: center; gap: 0 .35rem; }
 .file-list .pile-head .every { margin-left: auto; }
-.file-list .take-out { color: var(--order); }
+.file-list .take-out, .file-list .guess { color: var(--order); }
+.all-row { margin-top: 1rem; }
+.event { display: flex; align-items: center; gap: .9rem; min-height: 60px; padding: .4rem .6rem; }
+.event .txt { flex: 1; min-width: 0; }
+.event b, .event small { display: block; }
+.event b { font-weight: 600; overflow-wrap: anywhere; }
+.timeline .undone b { text-decoration: line-through; color: var(--overlay); }
+.timeline .in-run { margin-left: 1.2rem; }
+.timeline .note { padding: 0 .6rem; }
 .file-list [aria-pressed="true"] { opacity: .5; }
 .file-list [aria-pressed="true"] .tick { color: var(--calm); }
 .place { color: var(--subtext); }

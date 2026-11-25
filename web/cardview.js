@@ -1,6 +1,6 @@
 "use strict";
 // Cards on the page: tiles, − n + for a printing, the card dialog (#detail). For the search and
-// the collection page. Needs ui.js, query.js, store.js, collection.js, cardtext.js
+// the collection page. Needs ui.js, query.js, store.js, collection.js, timeline.js, cardtext.js
 // and rulings.js first.
 
 const SEARCH = document.body.dataset.page === "cards" ? "" : "index.html"; // where a query link goes
@@ -101,7 +101,7 @@ document.addEventListener("click", (e) => {
   const { own: id, ver } = b.closest("[data-own]").dataset, d = Number(b.dataset.d);
   // a tile's − takes the chosen version, or else one you do have
   const as = autoVer(id, addAs), v = ver ?? (d > 0 || COLL.v(id, as) ? as : Object.keys(VERSIONS).find((k) => COLL.v(id, k)) ?? as);
-  COLL.add(id, d, v);
+  TIMELINE.record("count", "", () => COLL.add(id, d, v));
 }, true);
 STORE.on((kinds) => {
   if (!kinds.has("coll")) return;

@@ -107,6 +107,9 @@ copies first: English, English foil, Chinese, Chinese foil, or the foils of a la
 **Spares** what is aside, what still has to come out, and copies it all as a list. Spares still count as yours; take off what's sold there.
 **Keep every copy**, in a card's dialog or when changing an entry, turns it off for a card; tokens and Spiderling have it on.
 
+**Timeline**: scans, filed cards, corrections, spares and counts on this device (not what other devices sync), each to undo or do
+again by itself, whatever came after. Scans from before it began can be put on the filing list again.
+
 Where a printing is only made as foil, or never, it's counted as that by itself (`foil` from Piltover's data); ✦ still overrides it,
 and the Collection page offers to correct copies counted before.
 

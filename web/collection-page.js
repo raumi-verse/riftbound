@@ -98,31 +98,26 @@ function foilNote() {
   box.innerHTML = `<span><b>${n}</b> cop${n === 1 ? "y is" : "ies are"} counted as a version that isn't made, mostly foil-only cards as non-foil.</span><button type="button" class="btn text leave">Leave them</button><button type="button" class="btn tonal fix">Correct them</button>`;
   $(".leave", box).onclick = () => { remember("rb-foil-ok", JSON.stringify([...dismissed, ...wrong.map((x) => `${x.id} ${x.from}`)])); foilNote(); };
   $(".fix", box).onclick = () => {
-    const before = new Map(wrong.map((x) => [x.id, STORE.get("coll", x.id)]));
-    for (const x of wrong) { COLL.add(x.id, x.n, x.to); COLL.add(x.id, -x.n, x.from); }
-    binder();
-    toast(`${n} corrected`, { undo: () => { for (const [id, r] of before) STORE.put("coll", id, r); binder(); } });
+    logged("edit", `${n} cop${n === 1 ? "y" : "ies"} corrected to the version that's made`, () => { for (const x of wrong) { COLL.add(x.id, x.n, x.to); COLL.add(x.id, -x.n, x.from); } }, { then: binder, say: `${n} corrected` });
   };
 }
 
 // ---------- Add ----------
 
-// what was just scanned, until it's filed in the box: the list in filing order, to tick off (FILING in collection.js)
-const FILE_KEY = "rb-filing";
-const toFile = () => { let f = null; try { f = JSON.parse(localStorage.getItem(FILE_KEY)); } catch { /* */ } return FILING.read(f); };
-const setToFile = (f) => { try { if (f.items.length || f.done.length) localStorage.setItem(FILE_KEY, JSON.stringify(f)); else localStorage.removeItem(FILE_KEY); } catch { /* */ } showFile(); };
+// what was just scanned, until it's filed in the box: the list in filing order, to tick off (FILE in timeline.js, FILING in collection.js)
+const toFile = FILE.get;
 function showFile() {
   const n = toFile().items.reduce((s, i) => s + i.n, 0);
   $("#file").hidden = !n;
   $("#file").textContent = `File ${n}`;
 }
-// everything as it is now, to come back to with undo
-function keepState(ids) {
-  const file = toFile(), recs = ["coll", "aside"].flatMap((kind) => [...new Set(ids)].map((id) => [kind, id, STORE.get(kind, id)]));
-  return () => {
-    for (const [kind, id, r] of recs) if (r) STORE.put(kind, id, r); else STORE.del(kind, id);
-    setToFile(file);
-  };
+// do it, keep it on the timeline, and offer to undo it; then() after either
+function logged(kind, text, fn, { then = () => {}, say = text } = {}) {
+  const k = TIMELINE.record(kind, text, fn);
+  showFile();
+  then();
+  if (k && say) toast(say, { undo: () => { TIMELINE.toggle(k, true); showFile(); then(); } });
+  return k;
 }
 const copies = (n, what = "") => `${n} ${what}${what ? " " : ""}cop${n === 1 ? "y" : "ies"}`;
 // {zh: 2, foil: 1} -> "2 Chinese and 1 English foil"
@@ -144,12 +139,12 @@ function drawRows(ul, rows) {
 }
 
 // n copies of a version, corrected: which printing, how many of which version, and whether every copy is kept.
-// onSave(printing id, {ver: n})
-function editCopies({ id, n, ver }, onSave) {
+// onSave(printing id, {ver: n}). guess: only what's on the filing list
+function editCopies({ id, n, ver, guess }, onSave) {
   const { card } = PRINTS.get(id.toUpperCase());
   let to = id, counts = { [ver || ""]: n };
   const d = sheet({ title: card.name, html: `<form>
-    ${card.printings.length > 1 ? `<label class="field"><span>Printing</span><select name="printing">${card.printings.map((p) => `<option value="${esc(p.id)}"${p.id === id ? " selected" : ""}>${esc(p.id)}${p.kind ? ` · ${esc(p.kind)}` : ""}</option>`).join("")}</select></label>` : `<p class="note">${esc(id)}</p>`}
+    ${guess ? `<p class="note">${esc(id)}. How many are still to be filed; what you have stays as it is.</p>` : card.printings.length > 1 ? `<label class="field"><span>Printing</span><select name="printing">${card.printings.map((p) => `<option value="${esc(p.id)}"${p.id === id ? " selected" : ""}>${esc(p.id)}${p.kind ? ` · ${esc(p.kind)}` : ""}</option>`).join("")}</select></label>` : `<p class="note">${esc(id)}</p>`}
     <div class="edit-vers"></div>
     <div><label class="chip-check keep"><input type="checkbox" name="keep"${KEEP.all(card) ? " checked" : ""}><span>Keep every copy</span></label><p class="note">Otherwise more than ${KEEP.size(card)} are spares.</p></div>
     <div class="row end"><button type="button" class="btn text danger-text gone">Take off</button><button class="btn filled">Save</button></div></form>` });
@@ -173,19 +168,27 @@ function editCopies({ id, n, ver }, onSave) {
   $(".gone", d).onclick = () => { counts = {}; done(); };
 }
 
+// "2× Jinx: English → 1 English and 1 Chinese"
+function editText(was, to, counts) {
+  const name = (id) => PRINTS.get(id.toUpperCase())?.card.name || id;
+  return `${was.n > 1 ? `${was.n}× ` : ""}${name(was.id)}${to === was.id ? "" : ` (${was.id} → ${to})`}: ${VERSIONS[was.ver || ""]} → ${Object.keys(counts).length ? verList(counts) : "taken off"}`;
+}
+
 function fileSheet() {
   const f = toFile();
   let rows = new Map(); // key -> {item, aside} | {done}
-  const d = sheet({ title: "File these", cls: "wide tall", onClose: showFile, html: `<p class="note">In the order of your box. Tap a card once it's in, hold it to change it.</p><ul class="file-list"></ul><div class="row end sticky"><button type="button" class="btn tonal all">All filed</button></div>` });
+  const d = sheet({ title: "File these", cls: "wide tall", onClose: showFile, html: `<p class="note">In the order of your box. Tap a card once it's in, hold it to change it.</p><ul class="file-list"></ul><div class="row end all-row"><button type="button" class="btn text all">All filed</button></div>` });
   const ul = $(".file-list", d);
   function draw() {
     rows = new Map();
-    const list = [], s = sortOut(f.items), part = (i, aside, n) => ({ item: i, id: i.id, ver: i.ver, n, aside });
+    const list = [], s = sortOut(f.items), part = (i, aside, n) => ({ item: i, id: i.id, ver: i.ver, guess: i.guess, n, aside });
     const into = filing(f.items.flatMap((i, k) => (s[k].box ? [{ ...part(i, false, s[k].box), out: s[k].out }] : [])), boxedIds(f.items));
     const aside = filing(f.items.flatMap((i, k) => (s[k].aside ? [{ ...part(i, true, s[k].aside), out: s[k].box ? {} : s[k].out }] : [])), []);
     let last = "";
     const add = (x, head, small) => {
-      const key = `${x.id} ${x.ver || ""} ${x.aside ? "aside" : "box"}`, out = Object.keys(x.out).length ? `<small class="take-out">take out ${verList(x.out)}</small>` : "";
+      const key = `${x.id} ${x.ver || ""} ${x.aside ? "aside" : "box"} ${x.guess ? "guess" : ""}`;
+      if (x.guess) small += `<small class="guess">how many is a guess: you have ${verList(Object.fromEntries(Object.keys(VERSIONS).map((v) => [v, COLL.v(x.id, v)]).filter(([, n]) => n)))}</small>`;
+      const out = Object.keys(x.out).length ? `<small class="take-out">take out ${verList(x.out)}</small>` : "";
       if (head !== last) list.push([`head ${head}`, head, "pile-head"]);
       last = head;
       rows.set(key, x);
@@ -204,39 +207,42 @@ function fileSheet() {
     $(".all", d).disabled = !f.items.length;
     drawRows(ul, list);
   }
-  const changed = () => { setToFile(f); draw(); };
   // f is kept by the handlers: what undo brings back goes into it
-  const undoing = (restore) => () => { restore(); Object.assign(f, toFile()); draw(); };
+  const then = () => { Object.assign(f, toFile()); draw(); };
+  const save = (fn) => () => { fn(); FILE.set(f); };
   ul.addEventListener("click", (e) => {
     const x = rows.get(e.target.closest("[data-k]")?.dataset.k);
     if (!x) return;
-    if (x.done) { FILING.untick(f, x.done); return changed(); }
-    const undo = undoing(keepState([x.id]));
-    FILING.tick(f, x.item, x.aside);
-    changed();
-    toast(`${x.card.name} ${x.aside ? "put aside" : "filed"}`, { undo });
+    if (x.done) { // undoes the tick
+      const e = TIMELINE.ofTick(x.done.k);
+      if (e) TIMELINE.toggle(e.k); else save(() => FILING.untick(f, x.done))();
+      showFile();
+      return then();
+    }
+    logged("tick", `${x.n > 1 ? `${x.n}× ` : ""}${x.card.name} ${x.aside ? "put aside" : "filed"}`, save(() => FILING.tick(f, x.item, x.aside)), { then });
   });
   onHold(ul, "[data-k]", (el) => {
     const x = rows.get(el.dataset.k);
     if (!x) return;
-    const from = x.done || x, was = { id: from.id, n: from.n, ver: from.ver || "" };
+    const from = x.done || x, was = { id: from.id, n: from.n, ver: from.ver || "", guess: !!from.guess };
     editCopies(was, (to, counts) => {
       const same = to === was.id && Object.keys(counts).length === 1 && counts[was.ver] === was.n;
       if (same) return draw(); // maybe kept now, so not a spare
-      const restore = keepState([was.id, to]);
-      if (x.done) FILING.untick(f, x.done);
-      FILING.edit(f, was, to, counts);
-      changed();
-      toast(!Object.keys(counts).length ? "Taken off" : x.done ? "Changed, to be filed again" : "Changed", { undo: undoing(restore) });
+      if (x.done && TIMELINE.ofTick(x.done.k)) { // its tick is undone, then it's changed
+        TIMELINE.toggle(TIMELINE.ofTick(x.done.k).k);
+        Object.assign(f, toFile());
+      } else if (x.done) save(() => FILING.untick(f, x.done))();
+      logged("edit", editText(was, to, counts), save(() => FILING.edit(f, was, to, counts)), { then, say: !Object.keys(counts).length ? "Taken off" : x.done ? "Changed, to be filed again" : "Changed" });
     });
   });
-  $(".all", d).onclick = () => {
-    const undo = keepState(f.items.map((i) => i.id)), n = f.items.reduce((s, i) => s + i.n, 0);
-    for (let i; (i = f.items[0]); ) if (!FILING.tick(f, i, false) && !FILING.tick(f, i, true)) f.items.shift();
-    f.done = [];
-    setToFile(f);
+  $(".all", d).onclick = async () => {
+    const n = f.items.reduce((s, i) => s + i.n, 0);
+    if (!(await ask(`Are all ${n} in the box or put aside? The list is emptied.`, { yes: "All filed" }))) return;
     d.close();
-    toast(`${n} filed`, { undo });
+    logged("file", `All filed: ${n} card${n === 1 ? "" : "s"}`, save(() => {
+      for (let i; (i = f.items[0]); ) if (!FILING.tick(f, i, false) && !FILING.tick(f, i, true)) f.items.shift();
+      f.done = [];
+    }));
   };
   draw();
 }
@@ -281,10 +287,8 @@ function sparesSheet() {
     drawRows(ul, list);
   }
   const move = (list, kind) => {
-    const restore = keepState(list.map((x) => x.id)), n = total(list);
-    for (const x of list) ASIDE.add(x.id, x.ver, kind === "out" ? x.n : -x.n);
-    draw();
-    toast(`${copies(n)} ${kind === "out" ? "put aside" : "put back"}`, { undo: () => { restore(); draw(); } });
+    const what = list.length === 1 ? `${list[0].n > 1 ? `${list[0].n}× ` : ""}${list[0].card.name}` : copies(total(list));
+    logged("spares", `${what} ${kind === "out" ? "taken out, put aside" : "put back in the box"}`, () => { for (const x of list) ASIDE.add(x.id, x.ver, kind === "out" ? x.n : -x.n); }, { then: draw });
   };
   ul.addEventListener("click", (e) => {
     const all = e.target.closest(".every"), x = rows.get(e.target.closest("[data-k]")?.dataset.k);
@@ -295,12 +299,12 @@ function sparesSheet() {
     const x = rows.get(el.dataset.k);
     if (x) editCopies(x, (to, counts) => {
       if (to === x.id && Object.keys(counts).length === 1 && counts[x.ver] === x.n) return draw();
-      const restore = keepState([x.id, to]), aside = x.kind !== "out";
-      if (aside) ASIDE.add(x.id, x.ver, -x.n);
-      COLL.add(x.id, -x.n, x.ver);
-      for (const [v, c] of Object.entries(counts)) { COLL.add(to, c, v); if (aside) ASIDE.add(to, v, c); }
-      draw();
-      toast(Object.keys(counts).length ? "Changed" : "Taken off", { undo: () => { restore(); draw(); } });
+      const aside = x.kind !== "out";
+      logged("edit", editText(x, to, counts), () => {
+        if (aside) ASIDE.add(x.id, x.ver, -x.n);
+        COLL.add(x.id, -x.n, x.ver);
+        for (const [v, c] of Object.entries(counts)) { COLL.add(to, c, v); if (aside) ASIDE.add(to, v, c); }
+      }, { then: draw, say: Object.keys(counts).length ? "Changed" : "Taken off" });
     });
   });
   $("form", d).addEventListener("change", (e) => { KEEP.setFoilFirst(e.target.value === "foil"); draw(); });
@@ -315,12 +319,62 @@ function sparesSheet() {
 }
 $("#spares").onclick = sparesSheet;
 
+// ---------- the timeline ----------
+
+function timelineSheet() {
+  const d = sheet({ title: "Timeline", cls: "wide tall", onClose: showFile, html: `<p class="note">What you did on this device. Undo takes back just that, whatever came after it.</p><ul class="file-list timeline"></ul>` });
+  const ul = $(".file-list", d), day = (t) => new Date(t).toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" }), time = (t) => new Date(t).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+  const unfolded = new Set();
+  let batches = [];
+  const nameOf = (id) => PRINTS.get(id.toUpperCase())?.card.name || id;
+  const text = (e) => e.text || Object.entries(e.d.coll || {}).map(([id, c]) => `${Object.entries(c).map(([v, n]) => `${n > 0 ? "+" : "−"}${Math.abs(n)} ${VERSIONS[v]}`).join(", ")} · ${nameOf(id)}`).join("; ") || "Counts changed";
+  const row = (e, cls = "") => [e.k, `<div class="event"><span class="txt"><b>${esc(text(e))}</b><small>${time(e.at)}${e.undone ? " · undone" : ""}</small></span><button type="button" class="btn ${e.undone ? "text" : "tonal"}" data-toggle="${esc(e.k)}">${e.undone ? "Do again" : "Undo"}</button></div>`, `${cls}${e.undone ? " undone" : ""}`];
+  function draw() {
+    const list = [], all = TIMELINE.all().reverse();
+    let last = "";
+    const head = (t) => { if (day(t) !== last) list.push([`day ${(last = day(t))}`, `<b>${esc(last)}</b>`, "pile-head"]); };
+    for (let i = 0; i < all.length; ) {
+      const e = all[i];
+      head(e.at);
+      // cards ticked one after another are one line, to unfold
+      let j = i;
+      while (e.kind === "tick" && all[j]?.kind === "tick" && day(all[j].at) === last && (j === i || all[j - 1].at - all[j].at < 30 * 60e3)) j++;
+      if (j - i < 3) { list.push(row(e)); i++; continue; }
+      const run = all.slice(i, j), key = `run ${run.at(-1).k}`, on = unfolded.has(key);
+      list.push([key, `<button type="button" class="list-row" data-run="${esc(key)}" aria-expanded="${on}"><span class="txt"><b>${run.length} filed or put aside</b><small>${time(run.at(-1).at)} – ${time(run[0].at)}</small></span><span aria-hidden="true">${on ? "⌃" : "⌄"}</span></button>`]);
+      if (on) for (const x of run) list.push(row(x, "in-run"));
+      i = j;
+    }
+    batches = TIMELINE.batches();
+    if (batches.length) {
+      list.push(["before", "<b>Before the timeline</b>", "pile-head"], ["before note", `<p class="note">Cards counted together, e.g. a scan. “List again” puts them back on the filing list; how many of each is a guess, and cards counted again since are with the newer ones.</p>`]);
+      batches.forEach((b, i) => list.push([`batch ${b.at}`, `<div class="event"><span class="txt"><b>${b.ids.length} cards</b><small>${esc(day(b.at))}, ${time(b.at)} · ${esc([...new Set(b.ids.map(nameOf))].slice(0, 3).join(" · "))}${b.ids.length > 3 ? " …" : ""}</small></span><button type="button" class="btn tonal" data-batch="${i}">List again</button></div>`]));
+    }
+    if (!list.length) list.push(["none", "Nothing yet.", "empty"]);
+    drawRows(ul, list);
+  }
+  ul.addEventListener("click", (e) => {
+    const b = e.target.closest("button");
+    if (!b) return;
+    const { toggle, run, batch } = b.dataset;
+    if (toggle) { TIMELINE.toggle(toggle); showFile(); draw(); }
+    if (run) { if (!unfolded.delete(run)) unfolded.add(run); draw(); }
+    if (batch) { const x = batches[batch]; logged("file", `On the filing list again: ${x.ids.length} cards`, () => TIMELINE.refile(x.ids), { then: draw, say: "On the filing list again" }); }
+  });
+  draw();
+}
+$("#timeline").onclick = timelineSheet;
+
 const openScan = initScan((items) => {
-  COLL.apply(items);
-  // what an earlier batch still has to file stays on the list
-  const f = { items: toFile().items, done: [] };
-  for (const i of items) FILING.put(f, i);
-  setToFile(f);
+  const n = items.reduce((s, i) => s + i.n, 0);
+  TIMELINE.record("add", `Scanned ${n} card${n === 1 ? "" : "s"}`, () => {
+    COLL.apply(items);
+    // what an earlier batch still has to file stays on the list
+    const f = { items: toFile().items, done: [] };
+    for (const i of items) FILING.put(f, i);
+    FILE.set(f);
+  });
+  showFile();
 }, () => toFile().items);
 let lastSet = null;
 $("#add").onclick = () => {
@@ -342,11 +396,11 @@ function quickEntry() {
     ev.preventDefault();
     const e = parseEntry(inp.value, lastSet);
     if (e.error != null) { if (e.error) out.innerHTML = `<p class="err">${esc(e.error)}</p>`; return; }
-    const ver = isFoil(e.ver) ? e.ver : autoVer(e.id, e.ver ?? addAs), before = COLL.n(e.id), n = COLL.add(e.id, e.n, ver), src = e.p.img || imgSrc({ p: e.p, printings: e.card.printings });
+    const ver = isFoil(e.ver) ? e.ver : autoVer(e.id, e.ver ?? addAs), before = COLL.n(e.id), k = TIMELINE.record("add", `${e.n > 0 ? "+" : "−"}${Math.abs(e.n)} ${VERSIONS[ver]} · ${e.card.name}`, () => COLL.add(e.id, e.n, ver)), n = COLL.n(e.id), src = e.p.img || imgSrc({ p: e.p, printings: e.card.printings });
     lastSet = e.set;
     inp.value = "";
     out.innerHTML = `<div class="entered">${src ? `<img src="${esc(src)}" alt="">` : ""}<span><b>${esc(e.card.name)}</b><small>${esc(e.id)}${e.p.kind ? ` · ${esc(e.p.kind)}` : ""} · ${VERSIONS[ver]}</small><span class="now">${n - before > 0 ? "+" : ""}${n - before} · you have <b>${n}</b></span></span><button type="button" class="btn tonal">Undo</button></div>`;
-    $("button", out).onclick = () => { COLL.add(e.id, before - n, ver); out.innerHTML = `<p class="note">Undone: ${esc(e.card.name)}</p>`; inp.focus(); };
+    $("button", out).onclick = () => { if (k) TIMELINE.toggle(k, true); out.innerHTML = `<p class="note">Undone: ${esc(e.card.name)}</p>`; inp.focus(); };
   };
 }
 
@@ -377,10 +431,8 @@ function pasteList() {
     clearTimeout(t);
     preview();
     if (!pasted.items.length) return;
-    const before = new Map(pasted.items.map((i) => [i.id, STORE.get("coll", i.id)]));
-    COLL.apply(pasted.items, f.mode.value);
     d.close();
-    toast(`${pasted.items.length} printing${pasted.items.length === 1 ? "" : "s"} ${f.mode.value === "set" ? "set" : "added"}`, { undo: () => { for (const [id, r] of before) if (r) STORE.put("coll", id, r); else STORE.del("coll", id); } });
+    logged("add", `${pasted.items.length} printing${pasted.items.length === 1 ? "" : "s"} ${f.mode.value === "set" ? "set" : "added"} from a list`, () => COLL.apply(pasted.items, f.mode.value));
   };
   f.t.focus();
 }
