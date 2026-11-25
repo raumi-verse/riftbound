@@ -100,6 +100,16 @@ the CSV export has an `own` column. Each printing is counted per language (Engli
 - **Paste a list**: quick entries, printing ids, `3 Name` lines, a CSV with an `id` and an `own`/`count` column (this page's
   export), or a deck code; add to what you have or replace the counts, with a preview and undo.
 
+Where a printing is only made as foil, or never, it's counted as that by itself (`foil` from Piltover's data); ✦ still overrides it,
+and the Collection page offers to correct copies counted before.
+
+## Rulings
+
+A card whose text was changed has an **errata** badge (`is:errata`) and shows where the change is from; the text shown is the current
+one. **Note a ruling** in the card's dialog keeps how something was ruled, with its source; notes sync like decks (`is:ruling`). A deck's
+list marks both, and **Rulings** on a deck, or § while playing, lists them for its cards and finds any other. Official rulings are only
+linked (`rulingsSite` in `web/settings.js`), as they are replaced too often to copy.
+
 ## Decks and games
 
 `decks.html`: your decks, **pinned** ones (your main decks) on top, **archived** ones folded away with their games kept. A deck
@@ -160,6 +170,7 @@ folding, hiding tokens/runes, domain order, the sync server, the points to win, 
 - `web/store.js`, `web/sync.js`: the records in the browser and their sync; `web/account.js`: the account button
 - `web/collection.js`: collection counts, quick entry, pasted lists; `web/scan.js`: scanning
 - `web/library.js`: decks, versions, games, records, the game being played (no DOM); `web/match.js`: the legend picker, the game sheet
+- `web/cardtext.js`: symbols and rules text; `web/rulings.js`: errata, ruling notes
 - `web/ui.js`: sheets, steppers, chips, toasts; `web/shell.js`: the running game's bar; `web/cardview.js`: tiles, the card dialog
 - `web/collection.html`, `web/collection-page.js`: the Collection page; `web/login.html`, `web/login.js`: where a passkey login returns
 - `web/decks.html`, `web/decks.js`, `web/play.html`, `web/play.js`: the Decks and Play pages

@@ -86,6 +86,25 @@ for (const f of asForms) {
 }
 showAs();
 
+// ---------- copies counted as a version their printing doesn't exist in ----------
+
+function foilNote() {
+  let dismissed = [];
+  try { dismissed = JSON.parse(localStorage.getItem("rb-foil-ok")) || []; } catch { /* */ }
+  const wrong = wrongFoils().filter((x) => !dismissed.includes(`${x.id} ${x.from}`)), n = wrong.reduce((s, x) => s + x.n, 0);
+  const box = $("#foil-note");
+  box.hidden = !n;
+  if (!n) return;
+  box.innerHTML = `<span><b>${n}</b> cop${n === 1 ? "y is" : "ies are"} counted as a version that isn't made, mostly foil-only cards as non-foil.</span><button type="button" class="btn text leave">Leave them</button><button type="button" class="btn tonal fix">Correct them</button>`;
+  $(".leave", box).onclick = () => { remember("rb-foil-ok", JSON.stringify([...dismissed, ...wrong.map((x) => `${x.id} ${x.from}`)])); foilNote(); };
+  $(".fix", box).onclick = () => {
+    const before = new Map(wrong.map((x) => [x.id, STORE.get("coll", x.id)]));
+    for (const x of wrong) { COLL.add(x.id, x.n, x.to); COLL.add(x.id, -x.n, x.from); }
+    binder();
+    toast(`${n} corrected`, { undo: () => { for (const [id, r] of before) STORE.put("coll", id, r); binder(); } });
+  };
+}
+
 // ---------- Add ----------
 
 // what was just scanned, until it's filed in the box: the list in filing order, to tick off
@@ -150,7 +169,7 @@ function quickEntry() {
     ev.preventDefault();
     const e = parseEntry(inp.value, lastSet);
     if (e.error != null) { if (e.error) out.innerHTML = `<p class="err">${esc(e.error)}</p>`; return; }
-    const ver = e.ver ?? addAs, before = COLL.n(e.id), n = COLL.add(e.id, e.n, ver), src = e.p.img || imgSrc({ p: e.p, printings: e.card.printings });
+    const ver = isFoil(e.ver) ? e.ver : autoVer(e.id, e.ver ?? addAs), before = COLL.n(e.id), n = COLL.add(e.id, e.n, ver), src = e.p.img || imgSrc({ p: e.p, printings: e.card.printings });
     lastSet = e.set;
     inp.value = "";
     out.innerHTML = `<div class="entered">${src ? `<img src="${esc(src)}" alt="">` : ""}<span><b>${esc(e.card.name)}</b><small>${esc(e.id)}${e.p.kind ? ` · ${esc(e.p.kind)}` : ""} · ${VERSIONS[ver]}</small><span class="now">${n - before > 0 ? "+" : ""}${n - before} · you have <b>${n}</b></span></span><button type="button" class="btn tonal">Undo</button></div>`;
@@ -173,7 +192,7 @@ function pasteList() {
     const replace = f.mode.value === "set", { items, problems } = pasted;
     $(".pv", d).innerHTML = (problems.length ? `<ul class="problems">${problems.slice(0, 20).map((p) => `<li>${esc(p)}</li>`).join("")}${problems.length > 20 ? `<li>… ${problems.length - 20} more</li>` : ""}</ul>` : "")
       + (items.length ? `<p>${items.length} printings, ${items.reduce((n, i) => n + i.n, 0)} cards</p><table class="gf-table">${items.map((i) => {
-        const now = replace && i.ver == null ? COLL.n(i.id) : COLL.v(i.id, i.ver || ""), after = Math.max(0, replace ? i.n : now + i.n);
+        const now = replace && i.ver == null ? COLL.n(i.id) : COLL.v(i.id, i.ver ?? autoVer(i.id)), after = Math.max(0, replace ? i.n : now + i.n);
         return `<tr><td>${esc(i.card.name)} <small>${esc(i.id)}${i.ver ? ` · ${VERSIONS[i.ver]}` : ""}</small></td><td class="n">${now} → <b>${after}</b></td></tr>`;
       }).join("")}</table>` : "");
     $(".btn.filled", d).disabled = !items.length;
@@ -194,11 +213,12 @@ function pasteList() {
 }
 
 // a tile's own count updates in cardview.js; the list itself only where it filters, and not while tapping + on it
-STORE.on((kinds) => { if (kinds.has("coll")) totals(); });
+STORE.on((kinds) => { if (kinds.has("coll")) { totals(); foilNote(); } });
 
 $("#synced").textContent = `${CARDS.length} cards · synced ${synced.slice(0, 10)}`;
 if (!BINDER.has(set)) set = SET_LIST[0];
 for (const r of $("#show-form").elements) if (r.name === "show") r.checked = r.value === show;
 totals();
 binder();
+foilNote();
 fromHash();

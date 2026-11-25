@@ -12,7 +12,7 @@ const COLS = [
 ];
 function listSection(rows) {
   return `<table class="list"><thead><tr>${COLS.map(([k, l]) => `<th${k ? ` data-sort="${k}" title="click: sort by this, shift-click: add as next key"` : ""}>${l}</th>`).join("")}</tr></thead><tbody>${rows.map((r, i) => `<tr data-i="${i}" data-id="${esc(r.p.id)}">
-    <td class="nm">${esc(r.name)}${r.role != null ? ` <small class="role">${["L", "C", "S", ""][r.role]}</small>` : ""}</td>
+    <td class="nm">${esc(r.name)}${r.role != null ? ` <small class="role">${["L", "C", "S", ""][r.role]}</small>` : ""}${r.errata ? ` <small class="errata-b" title="Errata: ${esc(r.errata)}">errata</small>` : ""}</td>
     <td>${esc(r.champion || "")}</td>
     <td>${ICONS.type(r.type)} ${esc(r.type)}${r.supertype ? ` <small>${esc(r.supertype)}</small>` : ""}</td>
     <td>${dots(r.domains)}</td>
@@ -281,6 +281,7 @@ function loadOwned() { window.OWNED = new Map(STORE.all("coll").filter((r) => r.
   window.OWNED_X = new Map(STORE.all("coll").filter((r) => r.data.x).map((r) => [r.id, r.data.x])); }
 loadOwned();
 STORE.on((kinds) => {
+  if (kinds.has("ruling") && /\bis:(ruling|noted)/i.test($("#q").value)) render();
   if (!kinds.has("coll")) return;
   loadOwned();
   if (/\bownp?[:=<>!]|is:(owned|missing|foil|chinese|french|korean)|sort:\S*own|order:\S*own/i.test($("#q").value)) render();

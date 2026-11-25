@@ -19,6 +19,15 @@ const langOf = (ver) => { const l = String(ver || "").split("-")[0]; return l in
 const isFoil = (ver) => String(ver || "").endsWith("foil");
 const VERSIONS = Object.fromEntries(Object.entries(LANGS).flatMap(([l, [n]]) => [[verOf(l), n], [verOf(l, true), `${n} foil`]]));
 const VER_SHORT = Object.fromEntries(Object.entries(LANGS).flatMap(([l, [, s]]) => [[verOf(l), s], [verOf(l, true), `${s} ✦`]]));
+// A version as the printing exists: foil where it's only made as foil, not where it never is (p.foil from sync.py)
+function autoVer(id, ver = "") {
+  const f = PRINTS.get(id.toUpperCase())?.p.foil;
+  return verOf(langOf(ver), f === "only" || (f !== "no" && isFoil(ver)));
+}
+// copies counted as a version their printing doesn't exist in: [{id, n, from, to}]
+function wrongFoils() {
+  return STORE.all("coll").flatMap(({ id }) => Object.keys(VERSIONS).map((from) => ({ id, n: COLL.v(id, from), from, to: autoVer(id, from) })).filter((x) => x.n > 0 && x.to !== x.from));
+}
 // "ogn 42 zh foil": the version words at the end, and the rest; ver undefined without any
 function splitVersion(s) {
   let lang, foil, m;
@@ -41,10 +50,10 @@ const COLL = {
   set(id, n) {
     n = Math.max(0, Math.round(n) || 0);
     if (n === COLL.n(id)) return n;
-    // the total, whatever the versions: more are plain English, fewer take those off first
+    // the total, whatever the versions: more are English (foil if it's only made so), fewer take the first ones off
     const c = Object.fromEntries(Object.keys(VERSIONS).map((k) => [k, COLL.v(id, k)]));
     let less = COLL.n(id) - n;
-    if (less < 0) c[""] -= less;
+    if (less < 0) c[autoVer(id)] -= less;
     else for (const k of Object.keys(c)) { const t = Math.min(less, c[k]); c[k] -= t; less -= t; }
     return put(id, c);
   },
@@ -64,7 +73,7 @@ const COLL = {
   add: (id, delta, ver = "") => COLL.setV(id, ver, COLL.v(id, ver) + delta),
   apply(items, mode = "add") {
     for (const { id, n, ver } of items) {
-      if (mode !== "set") COLL.add(id, n, ver || "");
+      if (mode !== "set") COLL.add(id, n, ver ?? autoVer(id));
       else if (ver == null) COLL.set(id, n); else COLL.setV(id, ver, n);
     }
   },
@@ -130,6 +139,7 @@ function parsePlain(line, lastSet) {
 // ("ogn 42 3"), a printing id, or "3 Name" / "Name x3" (the card's base printing; "Name (OGN-042a)" picks one).
 function parseBulk(text) {
   const items = new Map(), problems = [];
+  const said = (id, ver) => (ver === undefined || isFoil(ver) ? ver : autoVer(id, ver)); // "foil" said counts as said
   const add = (hit, n, line, ver) => {
     if (!hit) return problems.push(`not found: "${line}"`);
     const key = `${hit.p.id} ${ver ?? "any"}`;
@@ -165,15 +175,15 @@ function parseBulk(text) {
   for (const l of lines) {
     if (HEADER.test(l)) continue;
     const e = parseEntry(l, lastSet);
-    if (!e.error) { add(e, e.n, l, e.ver); lastSet = e.set; continue; }
+    if (!e.error) { add(e, e.n, l, said(e.id, e.ver)); lastSet = e.set; continue; }
     const { rest, ver } = byName.has(l.replace(/^\d+\s*x?\s+/i, "").toLowerCase()) ? { rest: l } : splitVersion(l);
     let m = rest.match(/^(\d+)\s*x?\s+(.+)$/i), n = 1, name = rest;
     if (m) [n, name] = [+m[1], m[2]];
     else if ((m = rest.match(/^(.+?)\s+x(\d+)$/i))) [name, n] = [m[1], +m[2]];
     const pid = name.match(/\(([A-Z]{2,5}-[\w*-]+)\)\s*$/i);
-    if (pid && PRINTS.has(pid[1].toUpperCase())) { add(PRINTS.get(pid[1].toUpperCase()), n, l, ver); continue; }
+    if (pid && PRINTS.has(pid[1].toUpperCase())) { add(PRINTS.get(pid[1].toUpperCase()), n, l, said(pid[1], ver)); continue; }
     const card = byName.get(name.replace(/\s*\([^)]*\)\s*$/, "").trim().toLowerCase());
-    add(card && PRINTS.get(card.id.toUpperCase()), n, l, ver);
+    add(card && PRINTS.get(card.id.toUpperCase()), n, l, card && said(card.id, ver));
   }
   return { items: [...items.values()], problems };
 }

@@ -72,6 +72,16 @@ def rules_text(s):
     return re.sub(r"\[([^\]]+)\]", token, s)
 
 
+ERRATA = re.compile(r"^Card Errata Text\s*[–—-]\s*From ([^\n]+?):?\s*\n")
+
+
+def errata_of(s):
+    """Text that replaces the printed one starts with where it's from -> (that, the text) or (None, the text)."""
+    s = unicodedata.normalize("NFKC", s or "").strip()
+    m = ERRATA.match(s)
+    return (m.group(1), s[m.end():].strip()) if m else (None, s)
+
+
 def champions(variants):
     """Champions are named by their champion units ("Jinx, Rebel"); a legend's champion is its tag."""
     champs = {v["card"]["name"].split(", ")[0] for v in variants
@@ -116,7 +126,8 @@ def build(variants, sets):
         role = None
         if champ:
             role = 0 if c["type"] == "Legend" else 1 if c["super"] == "Champion" else 2 if c["super"] == "Signature" else 3
-        text = rules_text(c["description"])
+        errata, text = errata_of(c["description"])
+        text = rules_text(text)
         cards.append({
             "id": base["variantNumber"],
             "name": c["name"],
@@ -134,6 +145,7 @@ def build(variants, sets):
             "alltext": "\n".join(filter(None, [text, rules_text(c.get("effect")), rules_text(c.get("attachText"))])),
             "flavour": base["flavorText"],
             "banned": c["banEffectiveDate"],
+            **({"errata": errata} if errata else {}),
             "landscape": c["type"] == "Battlefield",
             "printings": [{
                 "id": v["variantNumber"],
@@ -147,6 +159,8 @@ def build(variants, sets):
                 "promo": v["variantType"] == "Promo" or bool(PROMO_SETS.search(v["set"]["prefix"])),
                 "artist": v["artist"],
                 "img": v["imageUrl"],
+                # exists only as foil, or not as foil; nothing: both (or not known)
+                **({"foil": {"foil_only": "only", "nonfoil_only": "no"}[v["foilMode"]]} if v.get("foilMode") in ("foil_only", "nonfoil_only") else {}),
             } for v in prints],
         })
     cards.sort(key=lambda c: c["id"])

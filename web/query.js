@@ -73,6 +73,8 @@ const IS = {
   signature: (r) => r.supertype === "Signature",
   linked: (r) => !!r.champion, // belongs to a champion (legend, units, signatures, tagged cards)
   banned: (r) => !!r.banned,
+  errata: (r) => !!r.errata,
+  ruling: (r) => !!window.RULED?.has(r.id), noted: (r) => !!window.RULED?.has(r.id), // you wrote a ruling down
   landscape: (r) => r.landscape,
 };
 const NUMERIC = new Set(["energy", "might", "power", "num", "own", "ownp"]);

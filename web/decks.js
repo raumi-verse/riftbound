@@ -113,7 +113,7 @@ function listHtml(list) {
   const row = ([c, n]) => {
     const have = c.printings.reduce((s, p) => s + COLL.n(p.id), 0), want = need.get(c.id) || n;
     return `<li><span class="n">${n}</span>${c.energy != null && !["Legend", "Battlefield", "Rune"].includes(c.type) ? `<img class="ic" src="icons/${c.energy}.svg" alt="${c.energy}">` : `<span class="ic"></span>`}
-      <a href="./#${encodeURIComponent(`id=${c.id}`)}" data-img="${esc(cardImg(c) || "")}">${esc(c.name)}</a>${domainIcons(c)}${tracking && have < want ? ` <small class="miss" title="the deck needs ${want}, you have ${have}">have ${have}</small>` : ""}</li>`;
+      <a href="./#${encodeURIComponent(`id=${c.id}`)}" data-img="${esc(cardImg(c) || "")}">${esc(c.name)}</a>${domainIcons(c)}${c.errata ? ` <button type="button" class="errata-b" data-card="${esc(c.id)}" title="Errata: ${esc(c.errata)}">errata</button>` : ""}${rulingsOf(c.id).length ? ` <button type="button" class="errata-b ruled" data-card="${esc(c.id)}" title="Your rulings">§ ${rulingsOf(c.id).length}</button>` : ""}${tracking && have < want ? ` <small class="miss" title="the deck needs ${want}, you have ${have}">have ${have}</small>` : ""}</li>`;
   };
   const sec = (title, cards) => {
     if (!cards.length) return "";
@@ -154,6 +154,7 @@ function deckView(id, verId) {
           ${cur ? `<a class="btn tonal" href="goldfish.html#${encodeURIComponent(cur.code || cur.list)}">Goldfish</a>` : ""}
           ${cur?.code ? `<button type="button" class="btn text" data-copy="${esc(cur.code)}">Copy deck code</button>` : ""}
           ${cur ? `<button type="button" class="btn text" data-copy="${esc(cur.list)}">Copy list</button>` : ""}
+          ${cur ? `<button type="button" class="btn text" id="rules">Rulings</button>` : ""}
           <button type="button" id="del" class="btn text danger-text">Delete</button>
         </div>
       </div>
@@ -211,12 +212,15 @@ function deckView(id, verId) {
       LIB.removeDeck(id); location.hash = "";
     }
   };
+  if ($("#rules")) $("#rules").onclick = () => rulingsSheet(cardsOfList(cur.list));
   const ef = $("#edit-form");
   if ($("#edit")) $("#edit").onclick = () => { ef.hidden = false; $("#list").hidden = true; ef.list.focus(); };
   ef.querySelector(".cancel").onclick = () => { ef.hidden = true; $("#list").hidden = false; };
   ef.onsubmit = (e) => { e.preventDefault(); LIB.save(id, ef.list.value); route(); };
   if ($("#restore")) $("#restore").onclick = () => { LIB.save(id, shown.list); location.hash = `#d/${id}`; };
 }
+
+main.addEventListener("click", (e) => { const b = e.target.closest("[data-card]"); if (b) cardRulings(CARD_BY_ID.get(b.dataset.card)); });
 
 // a card's picture while hovering its name in a list
 const peek = document.createElement("img");
@@ -237,7 +241,7 @@ peek.hidden = true;
 window.addEventListener("hashchange", go);
 // edits from another tab or device; not while typing in this one
 STORE.on((kinds) => {
-  if (!["deck", "deckver", "match", "coll"].some((k) => kinds.has(k))) return;
+  if (!["deck", "deckver", "match", "coll", "ruling"].some((k) => kinds.has(k))) return;
   if (document.activeElement?.matches("input:not([type=radio]), textarea") && main.contains(document.activeElement)) return;
   if ($("dialog[open]")) return;
   route();

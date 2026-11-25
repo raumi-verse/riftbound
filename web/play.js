@@ -87,6 +87,7 @@ function counter(g) {
         <div class="strip"><button type="button" class="icon-btn undo" aria-label="Undo the last point or turn" title="Undo">↶</button>
           <button type="button" class="icon-btn flip" aria-label="Turn the opponent's half to face them" title="Turn the opponent's half to face them">⇅</button>
           <button type="button" class="btn tonal turn" title="Next turn"></button><span class="series"></span>
+          <button type="button" class="icon-btn rules" aria-label="Rulings" title="Rulings and errata">§</button>
           <button type="button" class="btn text finish">End</button></div>
       </div>
       ${half(g, "me")}
@@ -94,6 +95,7 @@ function counter(g) {
     root.querySelectorAll(".undo").forEach((b) => (b.onclick = () => setGame(GAME.undo(getGame()))));
     $(".turn", root).onclick = () => setGame(GAME.nextTurn(getGame()));
     $(".flip", root).onclick = () => { faceToFace = !faceToFace; try { localStorage.setItem("rb-face", String(faceToFace)); } catch { /* */ } paint(getGame()); };
+    $(".rules", root).onclick = () => { const v = LIB.version(getGame().deckver); rulingsSheet(v ? cardsOfList(v.list) : []); };
     root.querySelectorAll(".finish").forEach((b) => (b.onclick = endGame));
     root.querySelectorAll("[data-kind]").forEach(pointButton);
   }

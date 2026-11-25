@@ -1,67 +1,11 @@
 "use strict";
-// Cards on the page: symbols, rules text, tiles, − n + for a printing, the card dialog (#detail). For the search and
-// the collection page. Needs ui.js, query.js, store.js and collection.js first.
+// Cards on the page: tiles, − n + for a printing, the card dialog (#detail). For the search and
+// the collection page. Needs ui.js, query.js, store.js, collection.js, cardtext.js
+// and rulings.js first.
 
 const SEARCH = document.body.dataset.page === "cards" ? "" : "index.html"; // where a query link goes
 let onStep = () => {}; // ‹ › and ←/→ in the card dialog; the page sets it
 
-// the game's symbols, in web/icons/ (sync.py downloads them)
-const icon = (file, alt, cls = "") => `<img class="ic${cls ? " " + cls : ""}" src="icons/${file}" alt="${esc(alt)}" title="${esc(alt)}">`;
-const cap = (s) => s[0].toUpperCase() + s.slice(1);
-const ICONS = {
-  domain: (d) => icon(`${d.toLowerCase()}.webp`, cap(d.toLowerCase())),
-  energy: (n) => icon(`${n}.svg`, `${n} energy`, "en"),
-  might: () => icon("might.webp", "Might"),
-  exhaust: () => icon("tap.webp", "Exhaust"),
-  rune: () => icon("rune.webp", "Any rune"),
-  type: (t) => ["legend", "unit", "spell", "gear", "battlefield", "rune"].includes(t.split(" ")[0].toLowerCase()) ? icon(`type-${t.split(" ")[0].toLowerCase()}.webp`, t, "ty") : "",
-  rarity: (r) => ["common", "uncommon", "rare", "epic", "showcase"].includes(r.toLowerCase()) ? icon(`rarity-${r.toLowerCase()}.webp`, r, "ra") : "",
-};
-// A keyword's reminder text: the most common "(…)" right after it on the cards, "assault 2" and "assault" apart
-const REMINDERS = (() => {
-  const counts = {};
-  for (const c of CARDS) for (const [, k, t] of c.alltext.matchAll(/\[([A-Za-z][A-Za-z -]*?(?: \d+)?)\] ?\(([^)]+)\)/g)) {
-    const key = k.toLowerCase(), text = t[0].toUpperCase() + t.slice(1);
-    ((counts[key] ??= {})[text] = (counts[key][text] || 0) + 1);
-  }
-  return Object.fromEntries(Object.entries(counts).map(([k, ts]) => [k, Object.entries(ts).sort((a, b) => b[1] - a[1])[0][0]]));
-})();
-
-// The reminder for a keyword on card r: none if the card prints it, else the usual one with its runes in the
-// card's domain (Accelerate costs a rune of the card's domain)
-function reminder(low, base, r) {
-  if (r && [...r.alltext.matchAll(/\[([A-Za-z][A-Za-z -]*?(?: \d+)?)\] ?\(/g)].some((m) => m[1].toLowerCase() === low)) return null;
-  const t = REMINDERS[low] || REMINDERS[base];
-  if (!t || !r) return t;
-  return t.replace(/:rb_rune_(?!rainbow)\w+:/g, r.domains.length === 1 ? `:rb_rune_${r.domains[0].toLowerCase()}:` : ":rb_rune_rainbow:");
-}
-// [Assault 2]: its own banner, else the [Assault] banner and the number, else bold text; hover or focus shows
-// the reminder text. r: the card (for its reminders); null for no tooltips.
-function keywordBadge(k, r) {
-  const low = k.toLowerCase(), [, base, n] = low.match(/^(.*?)(?: (\d+))?$/);
-  const tip = r !== null && reminder(low, base, r);
-  const title = tip ? "" : ` title="${esc(k)}"`;
-  const badge = KW_ICONS[low] ? `<img class="kwb" src="${KW_ICONS[low]}" alt="[${esc(k)}]"${title}>`
-    : KW_ICONS[base] ? `<img class="kwb" src="${KW_ICONS[base]}" alt="[${esc(k)}]"${title}><b class="kwn">${n}</b>`
-    : `<b class="kw">${esc(k)}</b>`;
-  return tip ? `<span class="kwt" tabindex="0">${badge}<span class="tip"><b>${esc(k)}</b> ${richText(tip, null)}</span></span>` : badge;
-}
-function richText(t, r) {
-  return esc(t)
-    .replace(/:rb_energy_(\d+):/g, (_, n) => ICONS.energy(n))
-    .replace(/:rb_might:/g, ICONS.might)
-    .replace(/:rb_exhaust:/g, ICONS.exhaust)
-    .replace(/:rb_rune_rainbow:/g, ICONS.rune)
-    .replace(/:rb_rune_(\w+):/g, (_, d) => ICONS.domain(d))
-    .replace(/\[(&gt;)+\]/g, "▶")
-    .replace(/\[([A-Za-z][A-Za-z -]*?(?: \d+)?)\]/g, (_, k) => keywordBadge(k, r))
-    .replace(/\n/g, "<br>");
-}
-
-const dots = (ds) => ds.map(ICONS.domain).join("");
-// power is paid in runes of the card's domain; with two domains the split isn't in the data
-const powerIcons = (r) => !r.power ? "" : r.domains.length === 1 ? ICONS.domain(r.domains[0]).repeat(r.power) : `${r.power}${ICONS.rune()}`;
-const cost = (r) => [r.energy != null ? ICONS.energy(r.energy) : "", powerIcons(r)].join("");
 const qlink = (q, text) => `<a href="${SEARCH}#${encodeURIComponent(q)}">${esc(text)}</a>`;
 const quote = (s) => /\s/.test(s) ? `"${s}"` : s;
 
@@ -73,7 +17,7 @@ const versNote = (id) => Object.keys(VERSIONS).filter((k) => k && COLL.v(id, k))
 // the languages to offer: settings' and the one chosen now
 const myLangs = () => [...(S.languages || ["en", "zh"]), langOf(addAs)];
 // every version of a printing on its own, in the card dialog
-const versionRows = (id) => `<div class="versions" data-id="${esc(id)}">${Object.entries(VERSIONS).filter(([k]) => myLangs().includes(langOf(k)) || COLL.v(id, k)).map(([k, l]) => `<span class="ver"><span>${l}</span><span class="own" data-own="${esc(id)}" data-ver="${k}"><span role="button" data-d="-1" title="One less">−</span><b>${COLL.v(id, k)}</b><span role="button" data-d="1" title="One more">+</span></span></span>`).join("")}</div>`;
+const versionRows = (id) => `<div class="versions" data-id="${esc(id)}">${Object.entries(VERSIONS).filter(([k]) => COLL.v(id, k) || (myLangs().includes(langOf(k)) && k === autoVer(id, k))).map(([k, l]) => `<span class="ver"><span>${l}</span><span class="own" data-own="${esc(id)}" data-ver="${k}"><span role="button" data-d="-1" title="One less">−</span><b>${COLL.v(id, k)}</b><span role="button" data-d="1" title="One more">+</span></span></span>`).join("")}</div>`;
 const ownCtl = (id) => {
   const n = COLL.n(id);
   return `<span class="own${n ? "" : " none"}" data-own="${esc(id)}"><span role="button" tabindex="-1" data-d="-1" title="One less">−</span><b>${n}</b><span class="vers">${versNote(id)}</span><span role="button" tabindex="-1" data-d="1" title="One more (hover and press +)">+</span></span>`;
@@ -86,7 +30,7 @@ const haveBadge = (n) => (n ? `<span class="have" title="You have ${n}">×${n}</
 function gridSection(rows, binder = false) {
   return `<div class="grid">${rows.map((r, i) => {
     const src = imgSrc(r);
-    return `<button class="card${r.landscape ? " land" : ""}${binder && !COLL.n(r.p.id) ? " unowned" : ""}" data-i="${i}" data-id="${esc(r.p.id)}" title="${esc(r.name)}">${src ? `<img loading="lazy" src="${esc(src)}" alt="${esc(r.name)}">` : `<span class="noimg">${esc(r.name)}</span>`}${r.printings.length > 1 && !r._exp ? `<span class="nprint">${r.printings.length}</span>` : ""}${binder ? ownCtl(r.p.id) : haveBadge(haveN(r))}</button>`;
+    return `<button class="card${r.landscape ? " land" : ""}${binder && !COLL.n(r.p.id) ? " unowned" : ""}" data-i="${i}" data-id="${esc(r.p.id)}" title="${esc(r.name)}">${src ? `<img loading="lazy" src="${esc(src)}" alt="${esc(r.name)}">` : `<span class="noimg">${esc(r.name)}</span>`}${r.errata && !binder ? `<span class="errata-b" title="Errata: ${esc(r.errata)}">errata</span>` : ""}${r.printings.length > 1 && !r._exp ? `<span class="nprint">${r.printings.length}</span>` : ""}${binder ? ownCtl(r.p.id) : haveBadge(haveN(r))}</button>`;
   }).join("")}</div>`;
 }
 
@@ -104,10 +48,12 @@ function showCard(r, pos) {
     <h2>${esc(r.name)}</h2>
     <p class="line">${dots(r.domains)} ${ICONS.type(r.type)} ${esc([r.supertype, r.type].filter(Boolean).join(" "))}${stats ? ` · ${stats}` : ""}</p>
     ${r.banned ? `<p class="banned">Banned since ${esc(r.banned.slice(0, 10))}</p>` : ""}
+    ${errataLine(r)}
     <div class="tx">${richText(r.text, r)}</div>
     ${r.flavour ? `<p class="flav">${esc(r.flavour)}</p>` : ""}
     <p class="tags">${r.champion ? `Champion: ${qlink(`champ="${r.champion}" group:champion`, r.champion)} · ` : ""}${r.tags.filter((t) => t !== r.champion).map((t) => qlink(`tag="${t}"`, t)).join(", ")}</p>
     ${r.type === "Legend" ? `<p class="tags">${qlink(`for:"${r.name}" group:type`, "Everything this legend's deck may play")}</p>` : ""}
+    <div class="rulings" data-rulings="${esc(r.id)}">${rulingsHtml(r)}</div>
     ${sameChampion(r)}
     <h3>Printings <small>your copies</small></h3>
     <div class="prints">${r.printings.map((p) => `<div class="prw"><button class="pr" data-id="${esc(p.id + p.kind)}">${ICONS.rarity(p.rarity)} ${esc(p.set)} ${p.num ?? ""} · ${esc(p.rarity)}${p.kind ? ` · ${esc(p.kind)}` : ""}${p.artist ? `<small>${esc(p.artist)}</small>` : ""}</button>${versionRows(p.id)}</div>`).join("")}</div>`;
@@ -115,7 +61,7 @@ function showCard(r, pos) {
   d.querySelectorAll(".same button").forEach((b) => (b.onclick = () => showCard(FOLDED.find((c) => c.id === b.dataset.id), "")));
   d.querySelectorAll("[data-step]").forEach((b) => (b.onclick = () => onStep(Number(b.dataset.step))));
   d.querySelector(".close").onclick = () => d.close();
-  d.querySelectorAll("a").forEach((a) => a.addEventListener("click", () => d.close()));
+  d.querySelectorAll("a:not([target])").forEach((a) => a.addEventListener("click", () => d.close()));
   d.querySelector(".big").classList.toggle("land", !!r.landscape);
   show(r.p);
   if (!d.open) d.showModal();
@@ -144,7 +90,7 @@ document.addEventListener("click", (e) => {
   e.preventDefault(); e.stopPropagation();
   const { own: id, ver } = b.closest("[data-own]").dataset, d = Number(b.dataset.d);
   // a tile's − takes the chosen version, or else one you do have
-  const v = ver ?? (d > 0 || COLL.v(id, addAs) ? addAs : Object.keys(VERSIONS).find((k) => COLL.v(id, k)) ?? addAs);
+  const as = autoVer(id, addAs), v = ver ?? (d > 0 || COLL.v(id, as) ? as : Object.keys(VERSIONS).find((k) => COLL.v(id, k)) ?? as);
   COLL.add(id, d, v);
 }, true);
 STORE.on((kinds) => {

@@ -6,7 +6,7 @@ const SHELL = "shell-v3", ICONS = "icons-v1", IMAGES = "images-v1", LIBS = "libs
 const KEEP_IMAGES = 1500; // card pictures, ~100 KB each (about every printing, ~150 MB); oldest dropped first
 const SHELL_FILES = ["./", "index.html", "style.css", "settings.js", "cards.js", "query.js", "app.js", "manifest.webmanifest",
   "goldfish.html", "deck.js", "sim.js", "goldfish.js", "store.js", "sync.js", "account.js", "collection.js", "scan.js",
-  "decks.html", "decks.js", "library.js", "ui.js", "play.html", "play.js", "shell.js", "cardview.js", "match.js",
+  "decks.html", "decks.js", "library.js", "ui.js", "play.html", "play.js", "shell.js", "cardview.js", "cardtext.js", "rulings.js", "match.js",
   "collection.html", "collection-page.js", "login.html", "login.js"];
 
 self.addEventListener("install", (e) => {

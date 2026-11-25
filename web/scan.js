@@ -701,7 +701,7 @@ function initScan(onAdd) {
       const warn = [t.sure ? "" : "check the printing", t.guess ? "check the language" : "", t.again ? "the same card again, or counted twice?" : ""].filter(Boolean);
       return `${head}<li data-k="${esc(t.k)}" class="${warn.length ? "unsure" : ""}"><button type="button" class="look" aria-label="Compare with the scan">${p.img ? `<img src="${esc(p.img)}" alt="">` : "?"}</button>
         <span class="nm"><b>${esc(card.name)}</b><span class="sel">${opts}</span>${place.has(t.k) ? `<small class="place">${placeText(place.get(t.k))}</small>` : ""}${warn.map((w) => `<small class="warn">${w}</small>`).join("")}</span>
-        <span class="vers-btns">${langs.map((l) => `<button type="button" data-lang="${l}" aria-pressed="${langOf(t.ver) === l}" aria-label="${LANGS[l][0]}">${LANGS[l][1]}</button>`).join("")}<button type="button" data-foil aria-pressed="${isFoil(t.ver)}" aria-label="Foil">✦</button></span>
+        <span class="vers-btns">${langs.map((l) => `<button type="button" data-lang="${l}" aria-pressed="${langOf(t.ver) === l}" aria-label="${LANGS[l][0]}">${LANGS[l][1]}</button>`).join("")}<button type="button" data-foil aria-pressed="${isFoil(t.ver)}" aria-label="Foil"${p.foil ? ` class="fixed" title="${p.foil === "only" ? "only made as foil" : "not made as foil"}"` : ""}>✦</button></span>
         ${warn.length ? `<button type="button" class="icon-btn ok" aria-label="It's right" title="It's right">✓</button>` : ""}<button type="button" class="icon-btn drop" aria-label="Take it off the list" title="Take it off the list">✕</button></li>`;
     }).join("") + (hidden ? `<li class="rest"><button type="button" class="btn text">and ${hidden} more: Check</button></li>` : "")
       + (checking && !rows.length ? `<li class="empty">${n ? "Nothing left to check." : "No cards scanned yet."}</li>` : "");
@@ -714,7 +714,7 @@ function initScan(onAdd) {
   };
   async function countFixes() { const n = await CORRECTIONS.count(), b = $s(".fixes"); b.hidden = !n; b.textContent = `Corrections ${n}`; }
   function add(m) {
-    const lang = m.lang || langOf(addAs), ver = m.ver ?? verOf(lang, isFoil(addAs));
+    const lang = m.lang || langOf(addAs), ver = isFoil(m.ver) ? m.ver : autoVer(m.id, m.ver ?? verOf(lang, isFoil(addAs)));
     const t = { k: STORE.uid(), id: m.id, n: 1, ver, sure: m.sure, guess: !!(m.read && !m.lang), again: !!m.again };
     tally.push(t);
     save(); show(); beep();
@@ -1002,7 +1002,9 @@ function initScan(onAdd) {
     const sel = e.target.closest("select.printing"), t = sel && byKey(sel);
     if (!t) return;
     fixed(t, "printing", { id: sel.value, ver: t.ver || "" });
+    const was = PRINTS.get(t.id.toUpperCase()).p.foil;
     t.id = sel.value; t.sure = true;
+    t.ver = autoVer(t.id, verOf(langOf(t.ver), was ? isFoil(addAs) : isFoil(t.ver)));
     save(); show();
   });
   $s(".addall").onclick = () => {

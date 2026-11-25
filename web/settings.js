@@ -14,6 +14,10 @@ window.SETTINGS = {
   // Your cards' languages, offered in the card dialog (en, zh, fr, ko). Others show once you have some.
   languages: ["en", "zh"],
 
+  // Where a card's dialog links to for official rulings: {name} is the card's name as in their addresses; list is the
+  // page for cards whose address isn't certain (signatures, tokens). "" for no link.
+  rulingsSite: { name: "Runeweave", card: "https://runeweave.com/card/{name}", list: "https://runeweave.com/rulings" },
+
   // Scanning: show what the text recognition read in each frame (for tuning).
   scanDebug: false,
 

@@ -307,6 +307,7 @@ dialog.scan[open] { display: flex; flex-direction: column; gap: 0; }
 .scan .vers-btns { display: flex; gap: .25rem; flex: none; flex-wrap: wrap; justify-content: flex-end; max-width: 9.5rem; }
 .scan .vers-btns button { min-width: 42px; height: 42px; padding: 0 .4rem; border: 0; border-radius: 12px; background: var(--raised2); color: var(--overlay); font-weight: 650; cursor: pointer; }
 .scan .vers-btns [aria-pressed="true"] { background: var(--accent); color: var(--crust); }
+.scan .vers-btns .fixed { opacity: .6; }
 .scan .ok { color: var(--calm); }
 .scan .tally .rest, .scan .tally .empty { justify-content: center; border: 0; }
 .compare { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: .8rem; }
@@ -326,6 +327,25 @@ dialog.scan[open] { display: flex; flex-direction: column; gap: 0; }
 .scan .tally small { color: var(--overlay); }
 .scan .tally .warn { color: var(--order); }
 .scan .tally .own { background: var(--surface0); color: var(--text); }
+
+.errata-b { display: inline-block; font: 600 11px/1.5 system-ui, sans-serif; padding: 0 .55em; border: 0; border-radius: 99px; background: var(--order); color: #111; white-space: nowrap; }
+button.errata-b { cursor: pointer; min-height: 24px; }
+.errata-b.ruled { background: var(--tonal); color: var(--text); }
+.card .errata-b { position: absolute; right: 6px; top: 6px; }
+.errata-line { color: var(--subtext); font-size: 14px; margin: 0 0 .7rem; }
+.rulings { margin: 1rem 0; }
+.rulings h3 { margin: 0 0 .4rem; }
+.ruling-list { list-style: none; margin: 0 0 .7rem; padding: 0; display: grid; gap: .5rem; }
+.ruling-list li { background: var(--raised); border-radius: var(--r-m); padding: .7rem 1rem; position: relative; }
+.ruling-list p { margin: 0 4rem .2rem 0; overflow-wrap: anywhere; }
+.ruling-list .btn { position: absolute; right: .3rem; top: .2rem; }
+.rulings .row { gap: .4rem 1rem; }
+.rule-card { display: grid; grid-template-columns: minmax(90px, 30%) 1fr; gap: 1rem; align-items: start; }
+.rule-card > img { width: 100%; border-radius: 8px; }
+.found h3 { margin: 1rem 0 .2rem; font-size: 14px; color: var(--overlay); }
+.found .art { width: 48px; height: 48px; border-radius: 12px; background-size: 170%; }
+.note-bar { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem .6rem; padding: .6rem 1rem; margin-bottom: .8rem; border-radius: var(--r-m); background: var(--tonal); }
+.note-bar span { flex: 1 1 14rem; }
 
 /* ---------- search (index.html) ---------- */
 #q { flex: 1; width: auto; min-width: 0; font-family: ui-monospace, monospace; }
