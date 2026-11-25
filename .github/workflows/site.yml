@@ -59,5 +59,7 @@ jobs:
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site
+      # GitHub lists a fresh artifact a moment late; looked for at once it's "0 artifacts"
+      - run: sleep 20
       - id: deployment
         uses: actions/deploy-pages@v4
