@@ -92,7 +92,7 @@ const KEEP = {
   always: (card) => card.supertype === "Token" || /your deck can have any number of cards named/i.test(card.text || ""),
   all: (card) => STORE.get("keep", card.id)?.all ?? KEEP.always(card),
   setAll(card, on) { if (on === KEEP.always(card)) STORE.del("keep", card.id); else STORE.put("keep", card.id, { all: on }); },
-  size: (card) => S.playset?.[card.type] ?? S.playset?.other ?? 3,
+  size: playsetSize, // query.js
   limit: (card) => (KEEP.all(card) ? Infinity : KEEP.size(card)),
   foilFirst: () => STORE.get("keep", "foil-first")?.on ?? S.keepFoilFirst ?? false,
   setFoilFirst: (on) => STORE.put("keep", "foil-first", { on }),

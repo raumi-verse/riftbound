@@ -32,8 +32,9 @@ function totals() {
 function binder() {
   const name = $("#name").value.trim().toLowerCase();
   const from = name ? SET_LIST.flatMap((s) => BINDER.get(s)).filter((r) => r.name.toLowerCase().includes(name) || r.p.id.toLowerCase().startsWith(name)) : BINDER.get(set) || [];
-  shown = from.filter((r) => show === "all" || (COLL.n(r.p.id) > 0) === (show === "owned"));
-  const what = { all: "printings", owned: "printings you have", missing: "printings missing" }[show];
+  const keep = { all: () => true, owned: (r) => COLL.n(r.p.id) > 0, missing: (r) => !COLL.n(r.p.id), spares: (r) => COLL.n(r.p.id) > KEEP.limit(r) }[show] || (() => true);
+  shown = from.filter(keep);
+  const what = { all: "printings", owned: "printings you have", missing: "printings missing", spares: "printings with spares" }[show];
   $("#results").innerHTML = `<section style="--w:${S.cardWidth}px"><h2>${esc(name ? `“${$("#name").value.trim()}”` : setName(set))} <small>${shown.length} ${what}</small></h2>${shown.length ? gridSection(shown, true)
     : `<p class="empty">${show === "owned" && !name ? "Nothing from this set yet. <b>Add cards</b> scans them, or tap + on a card under <b>All</b>." : "No cards here."}</p>`}</section>`;
 }

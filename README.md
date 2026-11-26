@@ -80,8 +80,11 @@ in the same turn.
 
 `collection.html`: how full each set is, and a set's binder with − count + on every printing (All, Owned, Missing; hover a card and
 press `+` or `−`). The search shows a badge on cards you have, counts per printing in the card dialog, and knows your collection:
-`own>=3` (copies in any printing), `own:0`, `ownp>=1 is:alt` (the alt arts you have), `is:owned`, `is:missing`, `sort:-own`, and
-the CSV export has an `own` column. Each printing is counted per language (English, Chinese, French, Korean) and foil:
+`own>=3` (copies in any printing), `own:0`, `ownp>=1 is:alt` (the alt arts you have), `is:owned`, `is:missing`, `sort:-own`;
+and of the [spares](#collection): `spare>=1` (copies beyond a printing's playset, put aside or not), `aside>=1` (put aside),
+`is:spare`, `is:playset` (a full playset of some printing; `-is:playset` what's short), `is:keep` (keeps every copy), `sort:-spare`.
+The filter bar has the usual ones: cards you have, don't have, short of a playset or with spares, and sorting by copies or spares.
+The CSV export has `own`, a column per version, `spare` and `aside`; the binder shows **Spares** too. Each printing is counted per language (English, Chinese, French, Korean) and foil:
 **+ adds** says which one the tiles' + means, the card dialog has the `languages` of `web/settings.js` (`is:foil`, `is:chinese`, `is:french`, `is:korean`). **Add cards**:
 
 - **Scan**: on a phone, hold cards into the frame one after another. The art is compared with every printing's (`web/art.js`,

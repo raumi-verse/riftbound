@@ -192,8 +192,29 @@ test("the collection: own, ownp, is:owned, is:missing, sort:own, CSV", () => {
     assert.equal(run("t:unit sort:-own").sections[0].rows[0].name, "Jinx, Demolitionist");
     assert.match(run("own>").errors[0], /needs a number/);
     const csv = exportList(run("ownp>=1 show:printings"), "csv").trim().split("\r\n");
-    assert.ok(csv[0].endsWith(",own,foil,zh,zh-foil,fr,fr-foil,ko,ko-foil"));
-    assert.deepEqual(csv.slice(1).map((l) => +l.split(",").at(-8)).sort(), [1, 2]);
+    assert.ok(csv[0].endsWith(",own,foil,zh,zh-foil,fr,fr-foil,ko,ko-foil,spare,aside"));
+    assert.deepEqual(csv.slice(1).map((l) => +l.split(",").at(-10)).sort(), [1, 2]);
   } finally { ctx.OWNED = undefined; }
+});
+
+test("spares: spare, aside, is:spare, is:playset, is:keep, sort:spare, CSV", () => {
+  const CARDS = Q("CARDS"), exportList = Q("exportList");
+  const names = (q) => [...new Set(res(q).sections.flatMap((s) => s.rows.map((r) => r.name)))];
+  const jinx = CARDS.find((c) => c.name === "Jinx, Demolitionist"), alt = jinx.printings.find((p) => p.alt) || jinx.printings[1];
+  const legend = CARDS.find((c) => c.type === "Legend"), spider = CARDS.find((c) => c.name === "Spiderling");
+  ctx.OWNED = new Map([[jinx.printings[0].id, 5], [alt.id, 2], [legend.id, 2], [spider.id, 9]]);
+  ctx.ASIDE = new Map([[jinx.printings[0].id, 1]]);
+  ctx.KEEPALL = new Set([spider.id]);
+  try {
+    assert.deepEqual(names("is:spare").sort(), [jinx.name, legend.name].sort()); // 5 of 3, 2 of 1; not Spiderling
+    assert.deepEqual(names("spare>=2"), [jinx.name]); // per printing: the alt's 2 aren't more than 3
+    assert.deepEqual(names("aside>=1"), [jinx.name]);
+    assert.deepEqual(names("is:playset").sort(), [jinx.name, legend.name, spider.name].sort());
+    assert.deepEqual(names("is:keep"), [spider.name]);
+    assert.equal(run("sort:-spare").sections[0].rows[0].name, jinx.name);
+    const csv = exportList(run(`id=${jinx.printings[0].id}`), "csv").trim().split("\r\n");
+    assert.ok(csv[0].endsWith(",spare,aside"));
+    assert.deepEqual(csv[1].split(",").slice(-2), ["2", "1"]);
+  } finally { ctx.OWNED = ctx.ASIDE = ctx.KEEPALL = undefined; }
   assert.equal(run("is:owned").count, 0); // no collection: nothing owned
 });

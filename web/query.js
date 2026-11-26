@@ -32,6 +32,8 @@ const FIELDS = {
   for: "for", legend: "for",
   own: "own", have: "own",
   ownp: "ownp",
+  spare: "spare", spares: "spare",
+  aside: "aside",
 };
 const DIRECTIVES = ["sort", "group", "order", "show", "view"];
 // has: filters groups (needs group:): keep a group if one of its cards matches. Short forms below,
@@ -57,11 +59,21 @@ function playable(r, l) {
 const ownedPrint = (id) => (window.OWNED && window.OWNED.get(id)) || 0;
 const ownedVer = (r, re) => r.prints.some((p) => Object.keys((window.OWNED_X && window.OWNED_X.get(p.id)) || {}).some((k) => re.test(k)));
 const ownedCard = (r) => r.printings.reduce((n, p) => n + ownedPrint(p.id), 0);
+// A playset: how many copies of a printing stay in the box (settings' playset). window.KEEPALL: the cards that keep
+// every copy, window.ASIDE: printing id -> copies put aside (app.js, from collection.js). spare: copies beyond it,
+// put aside or not; aside: those put aside.
+const playsetSize = (r) => S.playset?.[r.type] ?? S.playset?.other ?? 3;
+const sparePrint = (r, id) => (window.KEEPALL?.has(r.id) ? 0 : Math.max(0, ownedPrint(id) - playsetSize(r)));
+const spareCard = (r) => r.printings.reduce((n, p) => n + sparePrint(r, p.id), 0);
+const asideCard = (r) => r.printings.reduce((n, p) => n + (window.ASIDE?.get(p.id) || 0), 0);
 
 const IS = {
   foil: (r) => ownedVer(r, /foil/), chinese: (r) => ownedVer(r, /zh/), french: (r) => ownedVer(r, /fr/), korean: (r) => ownedVer(r, /ko/), // copies you have
   owned: (r) => ownedCard(r) > 0,
   missing: (r) => ownedCard(r) === 0,
+  spare: (r) => spareCard(r) > 0, // more than a playset of a printing
+  playset: (r) => r.prints.some((p) => ownedPrint(p.id) >= playsetSize(r)),
+  keep: (r) => !!window.KEEPALL?.has(r.id), // keeps every copy
   alt: (r) => r.prints.some((p) => p.alt),
   overnumbered: (r) => r.prints.some((p) => p.overnumbered),
   promo: (r) => r.prints.some((p) => p.promo),
@@ -77,7 +89,7 @@ const IS = {
   ruling: (r) => !!window.RULED?.has(r.id), noted: (r) => !!window.RULED?.has(r.id), // you wrote a ruling down
   landscape: (r) => r.landscape,
 };
-const NUMERIC = new Set(["energy", "might", "power", "num", "own", "ownp"]);
+const NUMERIC = new Set(["energy", "might", "power", "num", "own", "ownp", "spare", "aside"]);
 const RANGE = /^(\d+)(?:\.\.|-)(\d+)$/; // e:2..4, e:2-4
 const ID_RANGE = /^([a-z]+)-(\d+)\.\.(?:([a-z]+)-)?(\d+)$/; // id:ogn-270..280, id:ogn-270..ogn-280
 // a number value the op can take: 3, 2.5, 7+ and ranges only with : = !=
@@ -313,6 +325,8 @@ function test(node, r) {
   if (f === "num") return r.prints.some((p) => numMatch(p.num, op, v));
   if (f === "own") return numMatch(ownedCard(r), op, v);
   if (f === "ownp") return r.prints.some((p) => numMatch(ownedPrint(p.id), op, v));
+  if (f === "spare") return numMatch(spareCard(r), op, v);
+  if (f === "aside") return numMatch(asideCard(r), op, v);
   if (f === "id") return idMatch(r, op, v);
   if (f === "domain") return domainMatch(r, op, v);
   if (f === "is") { const fn = IS[v.s]; return fn ? (op === "!=" ? !fn(r) : fn(r)) : false; }
@@ -349,6 +363,8 @@ const SORT_KEYS = {
   file: fileKey,
   own: (r) => ownedCard(r),
   ownp: (r) => ownedPrint(r.p.id),
+  spare: (r) => spareCard(r),
+  aside: (r) => asideCard(r),
 };
 
 function cmp(a, b) {
@@ -470,7 +486,7 @@ function stats(list) {
 // link: a query for exactly those printings; csv: a spreadsheet, energy and might only where the card has them.
 
 const OWN_VERSIONS = ["foil", "zh", "zh-foil", "fr", "fr-foil", "ko", "ko-foil"]; // collection.js VERSIONS
-const CSV_COLS = ["name", "id", "set", "num", "rarity", "type", "supertype", "domains", "energy", "might", "power", "champion", "artist", "own", ...OWN_VERSIONS];
+const CSV_COLS = ["name", "id", "set", "num", "rarity", "type", "supertype", "domains", "energy", "might", "power", "champion", "artist", "own", ...OWN_VERSIONS, "spare", "aside"];
 const csvCell = (x) => (x = x == null ? "" : String(x), /[",\n]/.test(x) ? `"${x.replace(/"/g, '""')}"` : x);
 function exportList(res, kind) {
   const rows = res.sections.flatMap((s) => s.rows);
@@ -478,7 +494,8 @@ function exportList(res, kind) {
   if (kind === "ids") return rows.map((r) => r.p.id).join("\n");
   if (kind === "link") return [`id=${rows.map((r) => r.p.id).join("|")}`, ...Object.entries(res.dirs).map(([k, v]) => `${k}:${v}`)].join(" ");
   return [CSV_COLS, ...rows.map((r) => [r.name, r.p.id, r.p.set, r.p.num, r.p.rarity, r.type, r.supertype, r.domains.join("+"),
-    HAS_STAT.energy(r) ? r.energy : null, HAS_STAT.might(r) ? r.might : null, r.power, r.champion, r.p.artist, ownedPrint(r.p.id), ...OWN_VERSIONS.map((k) => window.OWNED_X?.get(r.p.id)?.[k] || 0)])]
+    HAS_STAT.energy(r) ? r.energy : null, HAS_STAT.might(r) ? r.might : null, r.power, r.champion, r.p.artist, ownedPrint(r.p.id), ...OWN_VERSIONS.map((k) => window.OWNED_X?.get(r.p.id)?.[k] || 0),
+    sparePrint(r, r.p.id), window.ASIDE?.get(r.p.id) || 0])]
     .map((cells) => cells.map(csvCell).join(",")).join("\r\n") + "\r\n";
 }
 const uniq0 = (xs) => [...new Set(xs)]; // in order
@@ -526,6 +543,7 @@ const FIELD_HINTS = [
   ["t:", "type"], ["st:", "supertype"], ["d:", "domain"], ["e:", "energy"], ["m:", "might"], ["p:", "power"],
   ["champ:", "champion"], ["for:", "playable with a legend"], ["tag:", "tag"], ["o:", "rules text"], ["kw:", "keyword"],
   ["own:", "copies you have (any printing)"], ["ownp:", "copies of this printing"],
+  ["spare:", "copies beyond a playset"], ["aside:", "copies put aside"],
   ["r:", "rarity"], ["set:", "set"], ["a:", "artist"], ["f:", "flavour text"], ["n:", "name"], ["num:", "collector number"], ["id:", "printing id"],
   ["is:", "card property"], ["has:", "groups with such a card"], ["sort:", "sort the cards"], ["group:", "group by"],
   ["order:", "order the groups"], ["show:", "show:printings"], ["view:", "grid or list"],
@@ -546,7 +564,7 @@ const VALUES = {
   artist: lazy(() => uniq(CARDS.flatMap((c) => c.printings.map((p) => p.artist))).map((a) => [a])),
   name: lazy(() => uniq(CARDS.map((c) => c.name)).map((n) => [n])),
   has: () => Object.keys(HAS_SHORT).filter((k) => !k.endsWith("s")).map((k) => [k]),
-  sort: () => ["name", "energy", "might", "power", "type", "domain", "rarity", "set", "num", "champion", "role", "own", "ownp"].map((k) => [k]),
+  sort: () => ["name", "energy", "might", "power", "type", "domain", "rarity", "set", "num", "champion", "role", "own", "ownp", "spare", "aside"].map((k) => [k]),
   order: () => ["name", "count", "energy", "might", "domain", "type", "rarity", "set"].map((k) => [k]),
   group: () => Object.keys(GROUPS).map((k) => [k]),
   show: () => [["printings"]],

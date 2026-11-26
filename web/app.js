@@ -97,7 +97,12 @@ let domainMode = "any"; // any: d:fury|chaos · all: d:fury,chaos · within: d<=
 const allKeywords = [...new Set(CARDS.flatMap(keywords))].sort();
 const legendOptions = [...LEGENDS].sort((a, b) => cmp(a.champion + a.name, b.champion + b.name));
 const SORTS = [["", "default sort"], ["energy", "energy ↑"], ["-energy", "energy ↓"], ["might", "might ↑"], ["-might", "might ↓"],
-  ["name", "name"], ["domain,energy", "domain"], ["rarity", "rarity"], ["set", "set & number"]];
+  ["name", "name"], ["domain,energy", "domain"], ["rarity", "rarity"], ["set", "set & number"], ["-own", "copies you have ↓"], ["-spare", "spares ↓"]];
+// your collection: one of these terms, the select's own
+const OWN_TERMS = [["", "any cards"], ["is:owned", "cards you have"], ["is:missing", "cards you don't have"], ["-is:playset", "short of a playset"], ["is:spare", "with spares"]];
+const ownRe = /(^|\s)(-?is:(?:owned|missing|playset|spare))(?=\s|$)/gi;
+const readOwn = (q) => (q.match(ownRe) || [""])[0].trim().toLowerCase();
+const writeOwn = (q, t) => `${q.replace(ownRe, "$1").replace(/\s{2,}/g, " ").trim()} ${t}`.trim();
 const GROUPINGS = [["", "no groups"], ["champion", "by champion"], ["type", "by type"], ["domain", "by domain"], ["set", "by set"], ["rarity", "by rarity"]];
 
 const toggle = (f, v, html, title) => `<button type="button" class="tg" data-f="${f}" data-v="${esc(v)}" title="${esc(title)}">${html}</button>`;
@@ -113,6 +118,7 @@ function buildFilters() {
     <div class="fg">
       <select data-f="for" title="Only cards a deck with this legend may play">${opts([["", "any legend"], ...legendOptions.map((l) => [l.name.toLowerCase(), l.name])])}</select>
       <select data-f="keyword">${opts([["", "any keyword"], ...allKeywords.map((k) => [k, cap(k)])])}</select>
+      <select data-f="own" title="Your collection">${opts(OWN_TERMS)}</select>
       <select data-f="set">${opts([["", "any set"], ...SETS.map((x) => [x.id.toLowerCase(), `${x.id} · ${x.name}`])])}</select>
       <select data-f="sort">${opts(SORTS)}</select>
       <select data-f="group">${opts(GROUPINGS)}</select>
@@ -130,6 +136,9 @@ function syncFilters(q) {
     if (v && ![...sel.options].some((o) => o.value === v)) sel.add(new Option(v, v)); // typed by hand
     sel.value = v;
   }
+  const own = $("#filters select[data-f=own]"), t = readOwn(q);
+  if (t && ![...own.options].some((o) => o.value === t)) own.add(new Option(t, t));
+  own.value = t;
 }
 
 $("#filters").addEventListener("click", (e) => {
@@ -155,6 +164,7 @@ $("#filters").addEventListener("change", (e) => {
     domainMode = v;
     return setQuery(writeDomains(q, v, readDomains(q, domainMode).vals), true);
   }
+  if (f === "own") return setQuery(writeOwn(q, v), true);
   const name = { for: "for", keyword: "kw", set: "set", sort: "sort", group: "group" }[f];
   setQuery(writeTerm(q, f, v ? `${name}:${quoteVal(v)}` : ""), true);
 });
@@ -276,15 +286,17 @@ document.addEventListener("keydown", (e) => {
 
 // ---------- the collection ----------
 
-// the collection (store.js) for own:, ownp:, is:owned, is:missing and sort:own, kept up to date
+// the collection (store.js) for own:, ownp:, spare:, is:owned and the like, and sort:own, kept up to date
 function loadOwned() { window.OWNED = new Map(STORE.all("coll").filter((r) => r.data.n > 0).map((r) => [r.id, r.data.n]));
-  window.OWNED_X = new Map(STORE.all("coll").filter((r) => r.data.x).map((r) => [r.id, r.data.x])); }
+  window.OWNED_X = new Map(STORE.all("coll").filter((r) => r.data.x).map((r) => [r.id, r.data.x]));
+  window.ASIDE = new Map(STORE.all("aside").map((r) => [r.id, Object.keys(VERSIONS).reduce((n, v) => n + ASIDE.v(r.id, v), 0)]));
+  window.KEEPALL = new Set(CARDS.filter(KEEP.all).map((c) => c.id)); }
 loadOwned();
 STORE.on((kinds) => {
   if (kinds.has("ruling") && /\bis:(ruling|noted)/i.test($("#q").value)) render();
-  if (!kinds.has("coll")) return;
+  if (!["coll", "aside", "keep"].some((k) => kinds.has(k))) return;
   loadOwned();
-  if (/\bownp?[:=<>!]|is:(owned|missing|foil|chinese|french|korean)|sort:\S*own|order:\S*own/i.test($("#q").value)) render();
+  if (/\b(ownp?|spares?|aside)[:=<>!]|is:(owned|missing|foil|chinese|french|korean|spare|playset|keep)|(sort|order):\S*(own|spare|aside)/i.test($("#q").value)) render();
   else document.querySelectorAll("#results .card").forEach((el) => {
     const r = current.sections[el.closest("[data-s]").dataset.s].rows[el.dataset.i], b = $(".have", el), n = haveN(r);
     if (b) b.remove();
