@@ -407,7 +407,6 @@ body[data-page=collection] #account { margin-left: 0; }
 .event b { font-weight: 600; overflow-wrap: anywhere; }
 .timeline .undone b { text-decoration: line-through; color: var(--overlay); }
 .timeline .in-run { margin-left: 1.2rem; }
-.timeline .note { padding: 0 .6rem; }
 .file-list [aria-pressed="true"] { opacity: .5; }
 .file-list [aria-pressed="true"] .tick { color: var(--calm); }
 .place { color: var(--subtext); }

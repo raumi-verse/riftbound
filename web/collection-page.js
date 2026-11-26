@@ -325,7 +325,6 @@ function timelineSheet() {
   const d = sheet({ title: "Timeline", cls: "wide tall", onClose: showFile, html: `<p class="note">What you did on this device. Undo takes back just that, whatever came after it.</p><ul class="file-list timeline"></ul>` });
   const ul = $(".file-list", d), day = (t) => new Date(t).toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" }), time = (t) => new Date(t).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
   const unfolded = new Set();
-  let batches = [];
   const nameOf = (id) => PRINTS.get(id.toUpperCase())?.card.name || id;
   const text = (e) => e.text || Object.entries(e.d.coll || {}).map(([id, c]) => `${Object.entries(c).map(([v, n]) => `${n > 0 ? "+" : "−"}${Math.abs(n)} ${VERSIONS[v]}`).join(", ")} · ${nameOf(id)}`).join("; ") || "Counts changed";
   const row = (e, cls = "") => [e.k, `<div class="event"><span class="txt"><b>${esc(text(e))}</b><small>${time(e.at)}${e.undone ? " · undone" : ""}</small></span><button type="button" class="btn ${e.undone ? "text" : "tonal"}" data-toggle="${esc(e.k)}">${e.undone ? "Do again" : "Undo"}</button></div>`, `${cls}${e.undone ? " undone" : ""}`];
@@ -345,21 +344,15 @@ function timelineSheet() {
       if (on) for (const x of run) list.push(row(x, "in-run"));
       i = j;
     }
-    batches = TIMELINE.batches();
-    if (batches.length) {
-      list.push(["before", "<b>Before the timeline</b>", "pile-head"], ["before note", `<p class="note">Cards counted together, e.g. a scan. “List again” puts them back on the filing list; how many of each is a guess, and cards counted again since are with the newer ones.</p>`]);
-      batches.forEach((b, i) => list.push([`batch ${b.at}`, `<div class="event"><span class="txt"><b>${b.ids.length} cards</b><small>${esc(day(b.at))}, ${time(b.at)} · ${esc([...new Set(b.ids.map(nameOf))].slice(0, 3).join(" · "))}${b.ids.length > 3 ? " …" : ""}</small></span><button type="button" class="btn tonal" data-batch="${i}">List again</button></div>`]));
-    }
     if (!list.length) list.push(["none", "Nothing yet.", "empty"]);
     drawRows(ul, list);
   }
   ul.addEventListener("click", (e) => {
     const b = e.target.closest("button");
     if (!b) return;
-    const { toggle, run, batch } = b.dataset;
+    const { toggle, run } = b.dataset;
     if (toggle) { TIMELINE.toggle(toggle); showFile(); draw(); }
     if (run) { if (!unfolded.delete(run)) unfolded.add(run); draw(); }
-    if (batch) { const x = batches[batch]; logged("file", `On the filing list again: ${x.ids.length} cards`, () => TIMELINE.refile(x.ids), { then: draw, say: "On the filing list again" }); }
   });
   draw();
 }

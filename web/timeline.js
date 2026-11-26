@@ -6,7 +6,6 @@
 //   TIMELINE.record(kind, text, fn) -> key    runs fn and keeps what it changed; null if nothing
 //   TIMELINE.toggle(key, undone?)             undoes it, or does it again; with undone true or false only if it isn't so
 //   TIMELINE.all() -> [{k, at, kind, text, d, undone}]      TIMELINE.ofTick(k): the entry a ticked card is from
-//   TIMELINE.batches() -> [{at, ids}]         cards counted together before the timeline began; refile(ids) lists them
 //
 // An entry keeps differences, not states: d = {coll: {id: {ver: n}}, aside: …, items: {"id ver guess": n}, done: {add, del}}.
 
@@ -114,26 +113,5 @@ const TIMELINE = (() => {
     },
     all: () => read().filter(mine),
     ofTick: (k) => read().find((e) => mine(e) && !e.undone && e.kind === "tick" && e.d.done?.add.some((x) => x.k === k)),
-
-    batches() {
-      const start = Math.min(...read().map((e) => e.at)), out = [];
-      for (const r of STORE.all("coll").filter((r) => r.updated < start && r.updated > Date.now() - 14 * 864e5).sort((a, b) => b.updated - a.updated)) {
-        const last = out.at(-1);
-        if (last && last.from - r.updated < 1500) { last.ids.push(r.id); last.from = r.updated; } else out.push({ at: r.updated, from: r.updated, ids: [r.id] });
-      }
-      return out.filter((b) => b.ids.length > 1).slice(0, 12);
-    },
-    // On the filing list again. Which copies were new isn't known: the spares among them are taken as such, and one
-    // copy of what else there is, marked as a guess unless it's the only one.
-    refile(ids) {
-      const f = FILE.get();
-      for (const id of ids) {
-        if (!PRINTS.has(id.toUpperCase()) || [...f.items, ...f.done].some((i) => i.id === id)) continue; // on it already
-        const box = Object.entries(inBox(id, [])).filter(([, n]) => n).sort((a, b) => b[1] - a[1]);
-        for (const v of Object.keys(VERSIONS)) { const n = ASIDE.v(id, v); if (n) { ASIDE.add(id, v, -n); FILING.put(f, { id, n, ver: v, guess: true }); } }
-        if (box.length) FILING.put(f, { id, n: 1, ver: box[0][0], guess: COLL.n(id) > 1 });
-      }
-      FILE.set(f);
-    },
   };
 })();

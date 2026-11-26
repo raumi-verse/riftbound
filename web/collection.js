@@ -176,8 +176,8 @@ function spares(items = []) {
 }
 
 // The batch being filed: {items: [{id, n, ver, guess}], done: [{k, id, n, ver, guess, aside, out}]}, done: ticked, newest
-// first; aside: those went to the spares; out: taken out of the box with them; guess: put on the list again without
-// knowing how many (timeline.js). Changes the batch it's given.
+// first; aside: those went to the spares; out: taken out of the box with them; guess: the list lost once was put together
+// again without knowing how many. Changes the batch it's given.
 const FILING = {
   read(f) {
     if (!f?.items) return { items: [], done: [] };

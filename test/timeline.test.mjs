@@ -83,19 +83,12 @@ test("+ and − on a card one after another are one entry, none if they cancel",
   assert.equal(TIMELINE.record("edit", "nothing", () => {}), null);
 });
 
-test("a batch from before the timeline, on the list again", () => {
-  COLL.apply([{ id: a, n: 5, ver: "zh" }, { id: b, n: 1, ver: "" }]);
-  ASIDE.add(a, "zh", 2); // what All filed put there
-  const [x] = TIMELINE.batches();
-  assert.deepEqual(plain(x.ids).sort(), [a, b].sort());
-  const k = TIMELINE.record("file", "again", () => TIMELINE.refile(x.ids));
-  assert.deepEqual(plain(FILE.get().items).sort((p, q) => q.n - p.n), [{ id: a, n: 3, ver: "zh", guess: true }, { id: b, n: 1, ver: "" }].sort((p, q) => q.n - p.n));
-  assert.deepEqual([COLL.n(a), ASIDE.v(a, "zh")], [5, 0]);
-  const f = FILE.get();
-  FILING.edit(f, { id: a, n: 3, ver: "zh", guess: true }, a, { zh: 2 }); // a guess corrected leaves the counts
+test("a guess corrected leaves the counts", () => {
+  COLL.add(a, 5, "zh");
+  const f = { items: [{ id: a, n: 3, ver: "zh", guess: true }], done: [] };
+  FILING.edit(f, { id: a, n: 3, ver: "zh", guess: true }, a, { zh: 2 });
   assert.equal(COLL.n(a), 5);
-  TIMELINE.toggle(k);
-  assert.deepEqual([FILE.get().items.length, ASIDE.v(a, "zh")], [0, 2]);
+  assert.deepEqual(plain(f.items), [{ id: a, n: 2, ver: "zh", guess: true }]);
 });
 
 test("another account's entries aren't offered", () => {
